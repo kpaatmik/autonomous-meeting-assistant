@@ -1,24 +1,26 @@
-// bot.js
+// bot/bot.js
 const { getBrowser } = require("./browserPool");
 
 const delay = ms => new Promise(res => setTimeout(res, ms));
 
-async function joinMeeting(meetingUrl) {
-  const browser = await getBrowser();   // 🔁 reuse Chrome
-  const page = await browser.newPage(); // ➕ new TAB
+async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
+  const browser = await getBrowser();     //  Shared browser
+  const page = await browser.newPage();   //  Isolated tab per meeting
 
-  console.log("Opening meeting:", meetingUrl);
-  await page.goto(meetingUrl, { waitUntil: "networkidle2" });
+  console.log(`[${meeting_id}] Opening meeting:`, meeting_url);
 
+  await page.goto(meeting_url, { waitUntil: "networkidle2" });
   await delay(8000);
 
-  // Enter name
+  // Set bot name
   try {
     await page.waitForSelector('input[name="displayName"]', { timeout: 5000 });
-    await page.type('input[name="displayName"]', "AI Assistant");
-  } catch {}
+    await page.type('input[name="displayName"]', bot_name || "AI Assistant");
+  } catch {
+    console.log(`[${meeting_id}] Name input not found`);
+  }
 
-  // Mute mic & camera
+  // Mute mic & camera BEFORE join
   await page.evaluate(() => {
     document.querySelector('[aria-label*="microphone"]')?.click();
     document.querySelector('[aria-label*="camera"]')?.click();
@@ -42,17 +44,32 @@ async function joinMeeting(meetingUrl) {
   });
 
   if (joined) {
-    console.log("✅ Bot joined meeting");
+    console.log(`[${meeting_id}]  Bot joined meeting`);
   } else {
-    console.log("⚠️ Join button not found");
+    console.log(`[${meeting_id}]  Join button not found`);
   }
+
+  /*
+   FUTURE (DO NOT IMPLEMENT NOW)
+   ───────────────────────────
+   - Inject AudioWorklet
+   - Capture PCM audio
+   - Stream to backend WebSocket
+   - Receive TTS audio back
+  */
 }
 
-// Run
-const meetingUrl = process.argv[2];
-if (!meetingUrl) {
-  console.log("Usage: node bot.js <MEETING_URL>");
+//  ENTRY POINT
+try {
+  const payload = JSON.parse(process.argv[2]);
+
+  if (!payload.meeting_url || !payload.meeting_id) {
+    throw new Error("Invalid payload");
+  }
+
+  joinMeeting(payload);
+} catch (err) {
+  console.error("❌ Invalid input:", err.message);
+  console.log("Usage: node bot.js '<JSON_PAYLOAD>'");
   process.exit(1);
 }
-
-joinMeeting(meetingUrl);
