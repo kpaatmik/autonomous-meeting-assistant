@@ -2,11 +2,11 @@ from fastapi import APIRouter
 from datetime import datetime
 from app.services.scheduler import scheduler
 from app.services.meeting_manager import MeetingManager
+from app.storage.meetings import MEETINGS
 
 router = APIRouter()
 manager = MeetingManager()
-
-MEETINGS = {}
+# this meeting dictionary is a simple in-memory store for demo purposes, later it can be replaced with a database
 
 @router.post("/meetings")
 async def schedule_meeting(payload: dict):
@@ -18,7 +18,7 @@ async def schedule_meeting(payload: dict):
         manager.start_meeting,
         trigger="date",
         run_date=datetime.fromisoformat(payload["start_time"]),
-        args=[payload],
+        args=[meeting_id],
         id=f"meeting_{meeting_id}"
     )
 

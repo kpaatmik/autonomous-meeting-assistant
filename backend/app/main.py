@@ -1,10 +1,22 @@
 from fastapi import FastAPI
-from app.services.scheduler import start_scheduler
-from app.api.meetings import router
+from contextlib import asynccontextmanager
+from app.services.meeting_manager import MeetingManager
+from app.services.scheduler import scheduler
 
-app = FastAPI()
-app.include_router(router)
+manager = MeetingManager()
 
-@app.on_event("startup")
-def startup():
-    start_scheduler()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 🔵 Startup logic
+    print("Starting backend...")
+    # restore_jobs()
+    scheduler.start()
+
+    yield  # ⬅️ App runs here
+
+    # 🔴 Shutdown logic
+    print("Stopping backend...")
+    scheduler.shutdown(wait=False)
+    manager.stop_all()
+
+app = FastAPI(lifespan=lifespan)
