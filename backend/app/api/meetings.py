@@ -1,14 +1,14 @@
 from fastapi import APIRouter
 from datetime import datetime
-from app.services.scheduler import scheduler
-from app.services.meeting_manager import MeetingManager
-from app.storage.meetings import MEETINGS
+from services.scheduler import scheduler
+from services.meeting_manager import MeetingManager
+from storage.meetings import MEETINGS
 
-router = APIRouter()
+router = APIRouter(prefix="/meetings", tags=["Meetings"])
 manager = MeetingManager()
 # this meeting dictionary is a simple in-memory store for demo purposes, later it can be replaced with a database
 
-@router.post("/meetings")
+@router.post("/schedule")
 async def schedule_meeting(payload: dict):
     meeting_id = payload["meeting_id"]
 

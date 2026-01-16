@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
-from app.services.meeting_manager import MeetingManager
-from app.services.scheduler import scheduler
+from services.meeting_manager import MeetingManager
+from services.scheduler import scheduler
+from api.meetings import router as meetings_router
 
 manager = MeetingManager()
 
@@ -17,6 +18,7 @@ async def lifespan(app: FastAPI):
     # 🔴 Shutdown logic
     print("Stopping backend...")
     scheduler.shutdown(wait=False)
-    manager.stop_all()
+    await manager.stop_all()
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(meetings_router)
