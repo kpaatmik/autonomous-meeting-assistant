@@ -1,8 +1,10 @@
 from fastapi import FastAPI
-from api import demo
-app = FastAPI()
+from app.services.scheduler import start_scheduler
+from app.api.meetings import router
 
-app.include_router(demo.router)
-@app.get("/")
-async def read_root():
-    return {"Hello": "World"}
+app = FastAPI()
+app.include_router(router)
+
+@app.on_event("startup")
+def startup():
+    start_scheduler()
