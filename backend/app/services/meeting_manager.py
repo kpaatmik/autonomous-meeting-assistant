@@ -1,9 +1,29 @@
 from services.meeting_session import MeetingSession
+import asyncio
+from services.scheduler import get_event_loop
+
 
 
 class MeetingManager:
     def __init__(self):
         self.sessions = {}
+
+    def start_meeting_job(self, meeting_id: str):
+        """
+        APScheduler SAFE ENTRY POINT (SYNC)
+        """
+        print(f"[SCHEDULER] Triggered meeting {meeting_id}")
+        print(f"[SCHEDULER] Triggered meeting {meeting_id}")
+
+        loop = get_event_loop()
+        if loop is None:
+            print("[ERROR] No event loop available")
+            return
+
+        asyncio.run_coroutine_threadsafe(
+            self.start_meeting(meeting_id),
+            loop
+        )
 
     async def start_meeting(self, meeting_id: str):
         if meeting_id in self.sessions:
@@ -11,9 +31,9 @@ class MeetingManager:
             return
 
         session = MeetingSession(meeting_id)
-        await session.start()
-
         self.sessions[meeting_id] = session
+
+        await session.start()
         print(f"[INFO] Meeting {meeting_id} started")
 
     async def stop_meeting(self, meeting_id: str):
@@ -34,3 +54,6 @@ class MeetingManager:
                 print(f"[WARN] Failed to stop meeting {meeting_id}: {e}")
 
         self.sessions.clear()
+
+
+manager = MeetingManager()

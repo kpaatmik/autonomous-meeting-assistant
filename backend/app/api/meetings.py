@@ -1,12 +1,14 @@
 from fastapi import APIRouter
 from datetime import datetime
-from services.scheduler import scheduler
-from services.meeting_manager import MeetingManager
+import pytz
+
+from services.scheduler import get_scheduler
+from services.meeting_manager import manager
 from storage.meetings import MEETINGS
 
 router = APIRouter(prefix="/meetings", tags=["Meetings"])
-manager = MeetingManager()
-# this meeting dictionary is a simple in-memory store for demo purposes, later it can be replaced with a database
+
+IST = pytz.timezone("Asia/Kolkata")
 
 @router.post("/schedule")
 async def schedule_meeting(payload: dict):
@@ -14,12 +16,20 @@ async def schedule_meeting(payload: dict):
 
     MEETINGS[meeting_id] = payload
 
+    # 🔑 FIX: parse + localize time
+    start_time = datetime.fromisoformat(payload["start_time"])
+    start_time = IST.localize(start_time)
+
+    scheduler = get_scheduler()
     scheduler.add_job(
-        manager.start_meeting,
+        manager.start_meeting_job,      # sync entry point (correct)
         trigger="date",
-        run_date=datetime.fromisoformat(payload["start_time"]),
+        run_date=start_time,            # timezone-aware
         args=[meeting_id],
-        id=f"meeting_{meeting_id}"
+        id=f"meeting_{meeting_id}",
+        replace_existing=True
     )
+
+    print(f"[SCHEDULED] {meeting_id} at {start_time}")
 
     return {"status": "scheduled", "meeting_id": meeting_id}

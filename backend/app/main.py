@@ -1,23 +1,27 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
-from services.meeting_manager import MeetingManager
-from services.scheduler import scheduler
+import asyncio
+from services.scheduler import start_scheduler, get_scheduler
 from api.meetings import router as meetings_router
+from services.meeting_manager import manager
+from services.scheduler import start_scheduler, set_event_loop
 
-manager = MeetingManager()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 🔵 Startup logic
     print("Starting backend...")
-    # restore_jobs()
-    scheduler.start()
+    loop = asyncio.get_running_loop()
+    set_event_loop(loop)   # SAVE LOOP
+    start_scheduler()
 
-    yield  # ⬅️ App runs here
+    yield  #  App runs here
 
     # 🔴 Shutdown logic
     print("Stopping backend...")
-    scheduler.shutdown(wait=False)
+    scheduler = get_scheduler()
+    if scheduler and scheduler.running:
+        scheduler.shutdown(wait=False)
     await manager.stop_all()
 
 app = FastAPI(lifespan=lifespan)
