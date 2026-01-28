@@ -1,18 +1,17 @@
-// bot/bot.js
 const { getBrowser } = require("./browserPool");
+const WebSocket = require("ws");
 
 const delay = ms => new Promise(res => setTimeout(res, ms));
 
 async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
-  const browser = await getBrowser();     //  Shared browser
-  const page = await browser.newPage();   //  Isolated tab per meeting
+  const browser = await getBrowser();
+  const page = await browser.newPage();
 
   console.log(`[${meeting_id}] Opening meeting:`, meeting_url);
-
   await page.goto(meeting_url, { waitUntil: "networkidle2" });
   await delay(8000);
 
-  // Set bot name
+  // 1️⃣ Set bot name
   try {
     await page.waitForSelector('input[name="displayName"]', { timeout: 5000 });
     await page.type('input[name="displayName"]', bot_name || "AI Assistant");
@@ -20,7 +19,7 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
     console.log(`[${meeting_id}] Name input not found`);
   }
 
-  // Mute mic & camera BEFORE join
+  // 2️⃣ Mute mic & camera
   await page.evaluate(() => {
     document.querySelector('[aria-label*="microphone"]')?.click();
     document.querySelector('[aria-label*="camera"]')?.click();
@@ -28,7 +27,7 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
 
   await delay(3000);
 
-  // Click Join
+  // 3️⃣ Click Join
   const joined = await page.evaluate(() => {
     const btn =
       document.querySelector('[data-testid="prejoin.joinMeeting"]') ||
@@ -43,23 +42,55 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
     return false;
   });
 
-  if (joined) {
-    console.log(`[${meeting_id}]  Bot joined meeting`);
-  } else {
-    console.log(`[${meeting_id}]  Join button not found`);
+  if (!joined) {
+    console.log(`[${meeting_id}] ❌ Join button not found`);
+    return;
   }
 
-  /*
-   FUTURE (DO NOT IMPLEMENT NOW)
-   ───────────────────────────
-   - Inject AudioWorklet
-   - Capture PCM audio
-   - Stream to backend WebSocket
-   - Receive TTS audio back
-  */
+  console.log(`[${meeting_id}] ✅ Bot joined meeting`);
+  await delay(5000); // allow WebRTC graph to stabilize
+
+  // ================================
+  // AUDIO CAPTURE STARTS HERE
+  // ================================
+
+  // 4️⃣ WebSocket to backend
+  const socket = new WebSocket(
+    `ws://localhost:8000/ws/audio/${meeting_id}`
+  );
+
+  socket.onopen = () => {
+    console.log(`[${meeting_id}] 🔊 Audio WebSocket connected`);
+  };
+
+  // 5️⃣ Expose Node function to browser
+  await page.exposeFunction("sendPCM", chunk => {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(Buffer.from(chunk.buffer));
+    }
+  });
+
+  // 6️⃣ Inject AudioWorklet & capture PCM
+  await page.evaluate(async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    const audioCtx = new AudioContext({ sampleRate: 16000 });
+    await audioCtx.audioWorklet.addModule("http://localhost:8000/static/audioWorklet.js");
+
+    const source = audioCtx.createMediaStreamSource(stream);
+    const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
+
+    worklet.port.onmessage = e => {
+      window.sendPCM(e.data);
+    };
+
+    source.connect(worklet);
+  });
+
+  console.log(`[${meeting_id}] 🎙 PCM audio streaming started`);
 }
 
-//  ENTRY POINT
+// ENTRY POINT
 try {
   const payload = JSON.parse(process.argv[2]);
 
@@ -70,6 +101,5 @@ try {
   joinMeeting(payload);
 } catch (err) {
   console.error("❌ Invalid input:", err.message);
-  console.log("Usage: node bot.js '<JSON_PAYLOAD>'");
   process.exit(1);
 }
