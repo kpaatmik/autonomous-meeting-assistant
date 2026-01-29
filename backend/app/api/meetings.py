@@ -38,21 +38,22 @@ from services.persistence import get_persistence
 
 @router.get("/{meeting_id}/search")
 async def search_meeting(meeting_id: str, q: str, top_k: int = 5):
-    """Search meeting segments by semantic similarity using FAISS"""
     persistence = get_persistence()
     results = persistence.search(meeting_id, q, top_k=top_k)
 
     out = []
-    for row, score in results:
-        seg = {
+    for row, similarity in results:
+        out.append({
             "id": row[0],
             "meeting_id": row[1],
             "speaker": row[2],
             "start": row[3],
             "end": row[4],
             "text": row[5],
-            "score": score
-        }
-        out.append(seg)
+            "similarity": similarity
+        })
+
+    #  Cosine similarity → higher is better
+    out.sort(key=lambda x: x["similarity"], reverse=True)
 
     return {"results": out}
