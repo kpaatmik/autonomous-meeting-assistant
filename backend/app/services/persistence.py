@@ -105,7 +105,8 @@ class Persistence:
             index, meta = self._load_faiss(meeting_id)
             if index is None:
                 dim = vec.shape[0]
-                index = faiss.IndexFlatL2(dim)
+                faiss.normalize_L2(vec.reshape(1, -1))
+                index = faiss.IndexFlatIP(dim)
                 meta = []
 
             # add vector and append segment id to meta

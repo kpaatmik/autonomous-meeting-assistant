@@ -49,5 +49,6 @@ tqdm==4.66.4
 # Embeddings / Vector DB
 # -------------------------
 sentence-transformers==2.2.2
+transformers==4.35.2
 faiss-cpu==1.7.4
 
