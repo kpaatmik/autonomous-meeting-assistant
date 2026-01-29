@@ -33,3 +33,26 @@ async def schedule_meeting(payload: dict):
     print(f"[SCHEDULED] {meeting_id} at {start_time}")
 
     return {"status": "scheduled", "meeting_id": meeting_id}
+
+from services.persistence import get_persistence
+
+@router.get("/{meeting_id}/search")
+async def search_meeting(meeting_id: str, q: str, top_k: int = 5):
+    """Search meeting segments by semantic similarity using FAISS"""
+    persistence = get_persistence()
+    results = persistence.search(meeting_id, q, top_k=top_k)
+
+    out = []
+    for row, score in results:
+        seg = {
+            "id": row[0],
+            "meeting_id": row[1],
+            "speaker": row[2],
+            "start": row[3],
+            "end": row[4],
+            "text": row[5],
+            "score": score
+        }
+        out.append(seg)
+
+    return {"results": out}

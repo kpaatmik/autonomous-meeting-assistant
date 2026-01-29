@@ -4,8 +4,12 @@ import numpy as np
 from services.bot_launcher import launch_bot
 from services.audio_buffer import AudioBuffer
 from services.streaming_pipeline import StreamingPipeline
+from services.persistence import get_persistence
 
 redis_client = redis.Redis(host="localhost", port=6379)
+
+# shared persistence instance
+persistence = get_persistence()
 
 class MeetingSession:
     def __init__(self, meeting_id):
@@ -46,5 +50,7 @@ class MeetingSession:
                         results = self.pipeline.process(audio)
                         for r in results:
                             print(r)
+                            # persist segment in background to avoid blocking audio loop
+                            asyncio.create_task(asyncio.to_thread(persistence.save_segment, self.meeting_id, r))
 
                     last_id = msg_id
