@@ -11,7 +11,7 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
   await page.goto(meeting_url, { waitUntil: "networkidle2" });
   await delay(8000);
 
-  // 1️⃣ Set bot name
+  //  Set bot name
   try {
     await page.waitForSelector('input[name="displayName"]', { timeout: 5000 });
     await page.type('input[name="displayName"]', bot_name || "AI Assistant");
@@ -19,7 +19,7 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
     console.log(`[${meeting_id}] Name input not found`);
   }
 
-  // 2️⃣ Mute mic & camera
+  //  Mute mic & camera
   await page.evaluate(() => {
     document.querySelector('[aria-label*="microphone"]')?.click();
     document.querySelector('[aria-label*="camera"]')?.click();
@@ -27,7 +27,7 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
 
   await delay(3000);
 
-  // 3️⃣ Click Join
+  //  Click Join
   const joined = await page.evaluate(() => {
     const btn =
       document.querySelector('[data-testid="prejoin.joinMeeting"]') ||
@@ -43,27 +43,27 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
   });
 
   if (!joined) {
-    console.log(`[${meeting_id}] ❌ Join button not found`);
+    console.log(`[${meeting_id}] Join button not found`);
     return;
   }
 
-  console.log(`[${meeting_id}] ✅ Bot joined meeting`);
+  console.log(`[${meeting_id}]  Bot joined meeting`);
   await delay(5000); // allow WebRTC graph to stabilize
 
   // ================================
   // AUDIO CAPTURE STARTS HERE
   // ================================
 
-  // 4️⃣ WebSocket to backend
+  //  WebSocket to backend
   const socket = new WebSocket(
   `ws://127.0.0.1:8000/ws/audio/${meeting_id}`
 );
 
   socket.onopen = () => {
-    console.log(`[${meeting_id}] 🔊 Audio WebSocket connected`);
+    console.log(`[${meeting_id}]  Audio WebSocket connected`);
   };
 socket.on("error", err => {
-  console.error(`[${meeting_id}] ❌ WS error:`, err.message);
+  console.error(`[${meeting_id}]  WS error:`, err.message);
 });
 
 socket.on("close", code => {
