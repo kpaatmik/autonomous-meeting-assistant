@@ -65,49 +65,54 @@ socket.onopen = async () => {
   try {
     await delay(3000);
 
-await page.evaluate(async () => {
-  // Wait for Jitsi to fully settle
-  await new Promise(res => setTimeout(res, 8000));
+    await page.evaluate(async () => {
+      await new Promise(res => setTimeout(res, 8000));
 
-  const AudioCtx = window.AudioContext || window.webkitAudioContext;
-  const audioCtx = new AudioCtx({ sampleRate: 16000 });
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AudioCtx({ sampleRate: 16000 });
 
-  if (audioCtx.state === "suspended") {
-    await audioCtx.resume();
-  }
+      if (audioCtx.state === "suspended") {
+        await audioCtx.resume();
+      }
 
-  await audioCtx.audioWorklet.addModule(
-    "http://20.205.17.97:8000/static/audioWorklet.js"
-  );
+      try {
+        // Use localhost instead of hardcoded IP
+        await audioCtx.audioWorklet.addModule(
+          "http://localhost:8000/static/audioWorklet.js"
+        );
+      } catch (err) {
+        console.error("Failed to load audioWorklet.js:", err.message);
+        throw err;
+      }
 
-  const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
+      const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
 
-  worklet.port.onmessage = e => {
-    window.sendPCM(e.data);
-  };
+      worklet.port.onmessage = e => {
+        window.sendPCM(e.data);
+      };
 
-  const audioElements = Array.from(document.querySelectorAll("audio"));
+      const audioElements = Array.from(document.querySelectorAll("audio"));
 
-  if (audioElements.length === 0) {
-    console.warn("No remote audio elements yet");
-    return;
-  }
+      if (audioElements.length === 0) {
+        console.warn("No remote audio elements found");
+        return;
+      }
 
-  audioElements.forEach(audioEl => {
-    try {
-      const source = audioCtx.createMediaElementSource(audioEl);
-      source.connect(worklet);
-    } catch (err) {
-      console.warn("Audio element already connected");
-    }
-  });
-});
-
+      audioElements.forEach(audioEl => {
+        try {
+          const source = audioCtx.createMediaElementSource(audioEl);
+          source.connect(worklet);
+          worklet.connect(audioCtx.destination);
+        } catch (err) {
+          console.warn("Audio element connection error:", err.message);
+        }
+      });
+    });
 
     console.log(`[${meeting_id}] 🎙 PCM audio streaming started`);
   } catch (err) {
     console.error(
-      `[${meeting_id}]  Audio capture failed:`,
+      `[${meeting_id}] Audio capture failed:`,
       err.message
     );
   }
