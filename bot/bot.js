@@ -66,10 +66,15 @@ socket.onopen = async () => {
     await delay(3000);
 
 await page.evaluate(async () => {
-  // Give Jitsi time to fully attach audio tracks
+  // Wait for Jitsi to fully settle
   await new Promise(res => setTimeout(res, 8000));
 
-  const audioCtx = new AudioContext({ sampleRate: 16000 });
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const audioCtx = new AudioCtx({ sampleRate: 16000 });
+
+  if (audioCtx.state === "suspended") {
+    await audioCtx.resume();
+  }
 
   await audioCtx.audioWorklet.addModule(
     "http://20.205.17.97:8000/static/audioWorklet.js"
@@ -81,11 +86,10 @@ await page.evaluate(async () => {
     window.sendPCM(e.data);
   };
 
-  // 🔑 Capture ALL existing Jitsi audio elements (remote participants)
   const audioElements = Array.from(document.querySelectorAll("audio"));
 
   if (audioElements.length === 0) {
-    console.warn("No Jitsi audio elements found yet");
+    console.warn("No remote audio elements yet");
     return;
   }
 
@@ -94,7 +98,7 @@ await page.evaluate(async () => {
       const source = audioCtx.createMediaElementSource(audioEl);
       source.connect(worklet);
     } catch (err) {
-      console.warn("Audio source already connected:", err.message);
+      console.warn("Audio element already connected");
     }
   });
 });
