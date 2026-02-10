@@ -19,20 +19,21 @@ class MeetingManager:
         if loop is None:
             print("[ERROR] No event loop available")
             return
-
+        print(f"[SCHEDULER] loop found: {loop}")
         asyncio.run_coroutine_threadsafe(
             self.start_meeting(meeting_id),
             loop
         )
 
     async def start_meeting(self, meeting_id: str):
+        print(f"[INFO] Starting meeting {meeting_id}")
         if meeting_id in self.sessions:
             print(f"[INFO] Meeting {meeting_id} already running")
             return
 
         session = MeetingSession(meeting_id)
         self.sessions[meeting_id] = session
-
+        print(f"[INFO] session created for meeting {meeting_id}")
         await session.start()
         print(f"[INFO] Meeting {meeting_id} started")
 
