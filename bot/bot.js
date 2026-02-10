@@ -59,9 +59,42 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
   `ws://127.0.0.1:8000/ws/audio/${meeting_id}`
 );
 
-  socket.onopen = () => {
-    console.log(`[${meeting_id}]  Audio WebSocket connected`);
-  };
+socket.onopen = async () => {
+  console.log(`[${meeting_id}] 🔊 Audio WebSocket connected`);
+
+  try {
+    await delay(3000); // extra safety
+
+    await page.evaluate(async () => {
+      // Wait until media devices are ready
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      const audioCtx = new AudioContext({ sampleRate: 16000 });
+
+      await audioCtx.audioWorklet.addModule(
+        "http://20.205.17.97:8000/static/audioWorklet.js"
+      );
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const source = audioCtx.createMediaStreamSource(stream);
+      const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
+
+      worklet.port.onmessage = e => {
+        window.sendPCM(e.data);
+      };
+
+      source.connect(worklet);
+    });
+
+    console.log(`[${meeting_id}] 🎙 PCM audio streaming started`);
+  } catch (err) {
+    console.error(
+      `[${meeting_id}] ❌ Audio capture failed:`,
+      err.message
+    );
+  }
+};
+
 socket.on("error", err => {
   console.error(`[${meeting_id}]  WS error:`, err.message);
 });
@@ -98,6 +131,7 @@ socket.on("close", code => {
 }
 
 // ENTRY POINT
+
 try {
   const payload = JSON.parse(process.argv[2]);
 
@@ -105,8 +139,14 @@ try {
     throw new Error("Invalid payload");
   }
 
-  joinMeeting(payload);
+  joinMeeting(payload).catch(err => {
+    console.error(
+      `[${payload.meeting_id}] ❌ joinMeeting crashed:`,
+      err.message
+    );
+  });
 } catch (err) {
   console.error("❌ Invalid input:", err.message);
   process.exit(1);
 }
+
