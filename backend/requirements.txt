@@ -36,7 +36,7 @@ pyannote.database==5.1.0
 # -------------------------
 # Speech Recognition
 # -------------------------
-openai-whisper==20231117
+openai-whisper==20250625
 
 # -------------------------
 # Utilities
