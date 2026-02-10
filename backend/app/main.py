@@ -5,6 +5,8 @@ from services.scheduler import start_scheduler, get_scheduler
 from api.meetings import router as meetings_router
 from services.meeting_manager import manager
 from services.scheduler import start_scheduler, set_event_loop
+from fastapi.staticfiles import StaticFiles
+
 
 
 @asynccontextmanager
@@ -26,3 +28,4 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(meetings_router)
+app.mount("/static", StaticFiles(directory="app/static"), name="static")

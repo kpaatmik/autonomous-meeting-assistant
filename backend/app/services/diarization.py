@@ -2,12 +2,13 @@ from pyannote.audio import Pipeline
 import numpy as np
 import soundfile as sf
 import uuid, os
-
+from dotenv import load_dotenv
+load_dotenv()
 class DiarizationService:
     def __init__(self, meeting_id):
         self.pipeline = Pipeline.from_pretrained(
-            "pyannote/speaker-diarization",
-            use_auth_token="HF_TOKEN"
+            "pyannote/speaker-diarization"
+            
         )
 
     def diarize(self, audio, sample_rate=16000):

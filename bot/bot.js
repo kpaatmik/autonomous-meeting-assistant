@@ -56,7 +56,7 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
 
   // 4️⃣ WebSocket to backend
   const socket = new WebSocket(
-    `ws://localhost:8000/ws/audio/${meeting_id}`
+    `ws://20.205.17.97:8000/ws/audio/${meeting_id}`
   );
 
   socket.onopen = () => {
@@ -75,7 +75,7 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
     const audioCtx = new AudioContext({ sampleRate: 16000 });
-    await audioCtx.audioWorklet.addModule("http://localhost:8000/static/audioWorklet.js");
+    await audioCtx.audioWorklet.addModule("http://20.205.17.97:8000/static/audioWorklet.js");
 
     const source = audioCtx.createMediaStreamSource(stream);
     const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
