@@ -63,11 +63,11 @@ socket.onopen = async () => {
   console.log(`[${meeting_id}] 🔊 Audio WebSocket connected`);
 
   try {
-    await delay(3000); // extra safety
+    await delay(3000);
 
     await page.evaluate(async () => {
-      // Wait until media devices are ready
-      await navigator.mediaDevices.getUserMedia({ audio: true });
+      //  TEMP SAFE VERSION (no mic fight)
+      await new Promise(res => setTimeout(res, 5000));
 
       const audioCtx = new AudioContext({ sampleRate: 16000 });
 
@@ -75,8 +75,11 @@ socket.onopen = async () => {
         "http://20.205.17.97:8000/static/audioWorklet.js"
       );
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const source = audioCtx.createMediaStreamSource(stream);
+      const destination = audioCtx.createMediaStreamDestination();
+      const source = audioCtx.createMediaElementSource(
+        document.querySelector("audio") || new Audio()
+      );
+
       const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
 
       worklet.port.onmessage = e => {
@@ -89,11 +92,12 @@ socket.onopen = async () => {
     console.log(`[${meeting_id}] 🎙 PCM audio streaming started`);
   } catch (err) {
     console.error(
-      `[${meeting_id}] ❌ Audio capture failed:`,
+      `[${meeting_id}]  Audio capture failed:`,
       err.message
     );
   }
 };
+
 
 socket.on("error", err => {
   console.error(`[${meeting_id}]  WS error:`, err.message);
@@ -110,24 +114,24 @@ socket.on("close", code => {
     }
   });
 
-  // 6️⃣ Inject AudioWorklet & capture PCM
-  await page.evaluate(async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  // // 6️⃣ Inject AudioWorklet & capture PCM
+  // await page.evaluate(async () => {
+  //   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-    const audioCtx = new AudioContext({ sampleRate: 16000 });
-    await audioCtx.audioWorklet.addModule("http://20.205.17.97:8000/static/audioWorklet.js");
+  //   const audioCtx = new AudioContext({ sampleRate: 16000 });
+  //   await audioCtx.audioWorklet.addModule("http://20.205.17.97:8000/static/audioWorklet.js");
 
-    const source = audioCtx.createMediaStreamSource(stream);
-    const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
+  //   const source = audioCtx.createMediaStreamSource(stream);
+  //   const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
 
-    worklet.port.onmessage = e => {
-      window.sendPCM(e.data);
-    };
+  //   worklet.port.onmessage = e => {
+  //     window.sendPCM(e.data);
+  //   };
 
-    source.connect(worklet);
-  });
+  //   source.connect(worklet);
+  // });
 
-  console.log(`[${meeting_id}] 🎙 PCM audio streaming started`);
+  // console.log(`[${meeting_id}] 🎙 PCM audio streaming started`);
 }
 
 // ENTRY POINT
