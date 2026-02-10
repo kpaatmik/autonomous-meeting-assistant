@@ -56,12 +56,19 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
 
   // 4️⃣ WebSocket to backend
   const socket = new WebSocket(
-    `wss://20.205.17.97/ws/audio/${meeting_id}`
-  );
+  `ws://127.0.0.1:8000/ws/audio/${meeting_id}`
+);
 
   socket.onopen = () => {
     console.log(`[${meeting_id}] 🔊 Audio WebSocket connected`);
   };
+socket.on("error", err => {
+  console.error(`[${meeting_id}] ❌ WS error:`, err.message);
+});
+
+socket.on("close", code => {
+  console.log(`[${meeting_id}] 🔌 WS closed`, code);
+});
 
   // 5️⃣ Expose Node function to browser
   await page.exposeFunction("sendPCM", chunk => {
