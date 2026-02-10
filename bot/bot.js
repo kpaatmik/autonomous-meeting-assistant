@@ -65,29 +65,40 @@ socket.onopen = async () => {
   try {
     await delay(3000);
 
-    await page.evaluate(async () => {
-      //  TEMP SAFE VERSION (no mic fight)
-      await new Promise(res => setTimeout(res, 5000));
+await page.evaluate(async () => {
+  // Give Jitsi time to fully attach audio tracks
+  await new Promise(res => setTimeout(res, 8000));
 
-      const audioCtx = new AudioContext({ sampleRate: 16000 });
+  const audioCtx = new AudioContext({ sampleRate: 16000 });
 
-      await audioCtx.audioWorklet.addModule(
-        "http://20.205.17.97:8000/static/audioWorklet.js"
-      );
+  await audioCtx.audioWorklet.addModule(
+    "http://20.205.17.97:8000/static/audioWorklet.js"
+  );
 
-      const destination = audioCtx.createMediaStreamDestination();
-      const source = audioCtx.createMediaElementSource(
-        document.querySelector("audio") || new Audio()
-      );
+  const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
 
-      const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
+  worklet.port.onmessage = e => {
+    window.sendPCM(e.data);
+  };
 
-      worklet.port.onmessage = e => {
-        window.sendPCM(e.data);
-      };
+  // 🔑 Capture ALL existing Jitsi audio elements (remote participants)
+  const audioElements = Array.from(document.querySelectorAll("audio"));
 
+  if (audioElements.length === 0) {
+    console.warn("No Jitsi audio elements found yet");
+    return;
+  }
+
+  audioElements.forEach(audioEl => {
+    try {
+      const source = audioCtx.createMediaElementSource(audioEl);
       source.connect(worklet);
-    });
+    } catch (err) {
+      console.warn("Audio source already connected:", err.message);
+    }
+  });
+});
+
 
     console.log(`[${meeting_id}] 🎙 PCM audio streaming started`);
   } catch (err) {
