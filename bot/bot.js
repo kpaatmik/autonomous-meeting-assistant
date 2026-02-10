@@ -56,7 +56,7 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
 
   // 4️⃣ WebSocket to backend
   const socket = new WebSocket(
-    `ws://20.205.17.97:8000/ws/audio/${meeting_id}`
+    `wss://20.205.17.97/ws/audio/${meeting_id}`
   );
 
   socket.onopen = () => {
