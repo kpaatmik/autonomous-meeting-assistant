@@ -7,6 +7,7 @@ redis_client = redis.Redis(
 )
 
 def publish_pcm(meeting_id: str, pcm_bytes: bytes):
+    print("PCM chunk received:", len(pcm_bytes))
     redis_client.xadd(
         f"meeting:{meeting_id}:pcm",
         {"pcm": pcm_bytes}

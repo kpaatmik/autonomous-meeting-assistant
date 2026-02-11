@@ -93,6 +93,8 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
     if (!chunk || !chunk.length) return;
     if (socket.readyState !== WebSocket.OPEN) return;
 
+    console.log("➡ Sending PCM:", chunk.length); // ADD THIS
+
     socket.send(Buffer.from(chunk));
   } catch (err) {
     console.error("sendPCM error:", err.message);

@@ -37,10 +37,13 @@ class MeetingSession:
 
         while self.running:
             try:
+                print("Listening for PCM stream...")
                 msgs = await redis_client.xread(
                     {stream: last_id},
                     block=1000
                 )
+                print("PCM message read from Redis")
+
 
                 for _, entries in msgs:
                     for msg_id, data in entries:
