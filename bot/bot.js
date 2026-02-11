@@ -78,9 +78,20 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
       await audioCtx.audioWorklet.addModule(
         "http://localhost:8000/static/audioWorklet.js"
       );
-
+      
       const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
-      worklet.port.onmessage = e => window.sendPCM(e.data);
+
+        let frameCount = 0;
+
+        worklet.port.onmessage = e => {
+          frameCount++;
+
+          if (frameCount % 100 === 0) {
+            console.log("PCM frames flowing:", frameCount);
+          }
+
+          window.sendPCM(e.data);
+        };
 
       const audioElements = Array.from(document.querySelectorAll("audio"));
       if (!audioElements.length) {

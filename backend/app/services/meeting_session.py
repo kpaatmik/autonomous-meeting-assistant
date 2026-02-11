@@ -39,8 +39,12 @@ class MeetingSession:
 
             for _, entries in msgs:
                 for msg_id, data in entries:
-                    pcm = np.frombuffer(data[b"pcm"], dtype=np.float32)
+                    pcm_int16 = np.frombuffer(data[b"pcm"], dtype=np.int16)
+                    pcm = pcm_int16.astype(np.float32) / 32768.0
+
                     audio = self.buffer.add(pcm)
+                    print("PCM received:", len(data[b"pcm"]))
+
 
                     if audio is not None:
                         results = self.pipeline.process(audio)
