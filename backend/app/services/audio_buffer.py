@@ -10,7 +10,7 @@ class AudioBuffer:
     def add(self, chunk):
         self.buffer.append(chunk)
         total_samples = sum(len(c) for c in self.buffer)
-
+        print("Buffer size (samples):", total_samples)
         if total_samples >= SAMPLE_RATE * CHUNK_SECONDS:
             audio = np.concatenate(self.buffer)
             self.buffer.clear()

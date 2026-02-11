@@ -48,7 +48,7 @@ class MeetingSession:
                 for _, entries in msgs:
                     for msg_id, data in entries:
                         pcm = np.frombuffer(data[b"pcm"], dtype=np.int16).astype(np.float32) / 32768.0
-
+                        print("Chunk size (samples):", len(pcm))
                         audio = self.buffer.add(pcm)
 
                         if audio is not None:
