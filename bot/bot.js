@@ -83,52 +83,60 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
       await delay(3000);
 
       const success = await page.evaluate(async () => {
-        await new Promise(r => setTimeout(r, 3000));
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const audioCtx = new AudioCtx({ sampleRate: 16000 });
 
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        const audioCtx = new AudioCtx({ sampleRate: 16000 });
+  if (audioCtx.state === "suspended") {
+    await audioCtx.resume();
+  }
 
-        if (audioCtx.state === "suspended") {
-          await audioCtx.resume();
+  await audioCtx.audioWorklet.addModule(
+    "http://127.0.0.1:8000/static/audioWorklet.js"
+  );
+
+  const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
+
+  let frameCount = 0;
+
+  worklet.port.onmessage = e => {
+    frameCount++;
+    if (frameCount % 100 === 0) {
+      console.log("PCM frames flowing:", frameCount);
+    }
+    window.sendPCM(e.data);
+  };
+
+  function attachAudioElement(audioEl) {
+    try {
+      const stream = audioEl.captureStream();
+      const source = audioCtx.createMediaStreamSource(stream);
+      source.connect(worklet);
+      console.log("Attached to audio element");
+    } catch (err) {
+      console.warn("Attach failed:", err.message);
+    }
+  }
+
+  // Attach existing audio elements
+  document.querySelectorAll("audio").forEach(attachAudioElement);
+
+  // 🔥 Observe future audio elements (THIS IS THE FIX)
+  const observer = new MutationObserver(mutations => {
+    mutations.forEach(m => {
+      m.addedNodes.forEach(node => {
+        if (node.tagName === "AUDIO") {
+          console.log("New audio element detected");
+          attachAudioElement(node);
         }
-
-        await audioCtx.audioWorklet.addModule(
-          "http://127.0.0.1:8000/static/audioWorklet.js"
-        );
-
-        const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
-
-        let frameCount = 0;
-
-        worklet.port.onmessage = e => {
-          frameCount++;
-
-          if (frameCount % 100 === 0) {
-            console.log("PCM frames flowing:", frameCount);
-          }
-
-          window.sendPCM(e.data);
-        };
-
-        const audioElements = Array.from(document.querySelectorAll("audio"));
-
-        if (!audioElements.length) {
-          console.warn("No Jitsi audio elements found yet");
-          return false;
-        }
-
-        audioElements.forEach(audioEl => {
-          try {
-            const stream = audioEl.captureStream();
-            const source = audioCtx.createMediaStreamSource(stream);
-            source.connect(worklet);
-          } catch (err) {
-            console.warn("Audio tap failed:", err.message);
-          }
-        });
-
-        return true;
       });
+    });
+  });
+
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  return true;
+});
+
 
       if (success) {
         console.log(`[${meeting_id}] 🎙 PCM audio streaming started`);
