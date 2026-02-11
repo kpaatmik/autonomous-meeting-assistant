@@ -109,7 +109,7 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
         }
 
         await audioCtx.audioWorklet.addModule(
-          "http://127.0.0.1:8000/static/audioWorklet.js"
+          "http://localhost:8000/static/audioWorklet.js"
         );
 
         const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
