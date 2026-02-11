@@ -50,6 +50,9 @@ class MeetingSession:
                         print("Redis entry keys:", data.keys())
                         pcm = np.frombuffer(data[b"pcm"], dtype=np.int16).astype(np.float32) / 32768.0
                         print("Chunk size (samples):", len(pcm))
+                        energy = np.mean(np.abs(pcm))
+                        print("Chunk energy:", energy)
+
                         audio = self.buffer.add(pcm)
 
                         if audio is not None:

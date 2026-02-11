@@ -93,8 +93,21 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
       if (!chunk || chunk.length === 0) return;
       if (socket.readyState !== WebSocket.OPEN) return;
 
-      // Convert to Buffer if it's typed array
-      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      // Convert typed array to Buffer properly
+      let buffer;
+      if (chunk instanceof ArrayBuffer) {
+        buffer = Buffer.from(chunk);
+      } else if (ArrayBuffer.isView(chunk)) {
+        // Int16Array, Float32Array, etc.
+        buffer = Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+      } else if (Array.isArray(chunk)) {
+        // Plain array - convert to Int16Array first
+        const int16 = new Int16Array(chunk);
+        buffer = Buffer.from(int16.buffer);
+      } else {
+        console.warn("[PCM] Unknown data type:", typeof chunk);
+        return;
+      }
 
       console.log(`[${meeting_id}] ➡ Sending PCM: ${buffer.length} bytes`);
       socket.send(buffer);
@@ -130,16 +143,21 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
         const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
 
         worklet.port.onmessage = e => {
-          console.log(`[AudioWorklet] Got data: ${e.data.length} bytes`);
+          // e.data is already Int16Array from audioWorklet
+          console.log(`[AudioWorklet] Sending: ${e.data.length} samples`);
           window.sendPCM(e.data);
         };
 
         function attachAudioElement(audioEl) {
           try {
-            const stream = audioEl.captureStream();
+            const stream = audioEl.captureStream
+              ? audioEl.captureStream()
+              : audioEl.mozCaptureStream();
+
             const source = audioCtx.createMediaStreamSource(stream);
             source.connect(worklet);
-            console.log("[Audio] Attached element");
+            worklet.connect(audioCtx.destination);
+            console.log("[Audio] Element attached");
             return true;
           } catch (err) {
             console.warn("[Audio] Attach failed:", err.message);
@@ -151,24 +169,6 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
         let count = 0;
         document.querySelectorAll("audio").forEach(el => {
           if (attachAudioElement(el)) count++;
-        });
-        console.log(`[Audio] Attached ${count} existing elements`);
-
-        // Observe new audio elements
-        const observer = new MutationObserver(mutations => {
-          mutations.forEach(m => {
-            m.addedNodes.forEach(node => {
-              if (node.tagName === "AUDIO") {
-                console.log("[Audio] New element detected");
-                attachAudioElement(node);
-              }
-            });
-          });
-        });
-
-        observer.observe(document.body, {
-          childList: true,
-          subtree: true
         });
 
         return count > 0;
