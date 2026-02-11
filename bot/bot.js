@@ -89,10 +89,16 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
   );
 
   await page.exposeFunction("sendPCM", chunk => {
-    if (socket.readyState === WebSocket.OPEN) {
-      socket.send(Buffer.from(chunk.buffer));
-    }
-  });
+  try {
+    if (!chunk || !chunk.length) return;
+    if (socket.readyState !== WebSocket.OPEN) return;
+
+    socket.send(Buffer.from(chunk));
+  } catch (err) {
+    console.error("sendPCM error:", err.message);
+  }
+});
+
 
   socket.on("open", async () => {
     console.log(`[${meeting_id}] Audio socket connected`);
