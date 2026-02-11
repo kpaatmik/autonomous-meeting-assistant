@@ -3,6 +3,7 @@ import numpy as np
 import soundfile as sf
 import uuid, os
 from dotenv import load_dotenv
+import torch
 load_dotenv()
 class DiarizationService:
     def __init__(self, meeting_id):
@@ -15,7 +16,9 @@ class DiarizationService:
 
     def diarize(self, audio, sample_rate=16000):
         print(f"[DIARIZATION] Starting diarization for audio of length {len(audio)/sample_rate:.2f} seconds")
-        waveform = audio.reshape(1, -1)
+
+        # Convert numpy -> torch tensor
+        waveform = torch.from_numpy(audio).float().unsqueeze(0)
 
         diarization = self.pipeline({
             "waveform": waveform,
@@ -23,7 +26,7 @@ class DiarizationService:
         })
 
         segments = []
-        print(f"[DIARIZATION] Diarization completed, found {len(diarization.itertracks())} segments")
+
         for turn, _, speaker in diarization.itertracks(yield_label=True):
             segments.append({
                 "speaker": speaker,
