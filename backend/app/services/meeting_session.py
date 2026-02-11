@@ -42,7 +42,7 @@ class MeetingSession:
                     {stream: last_id},
                     block=1000
                 )
-                print("PCM message read from Redis")
+                print(f"PCM message read from Redis{msgs}")
 
 
                 for _, entries in msgs:
