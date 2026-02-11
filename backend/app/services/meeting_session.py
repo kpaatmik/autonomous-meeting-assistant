@@ -1,5 +1,5 @@
 import asyncio
-import redis
+import redis.asyncio as redis
 import numpy as np
 from services.bot_launcher import launch_bot
 from services.audio_buffer import AudioBuffer
@@ -25,6 +25,10 @@ class MeetingSession:
         self.running = False
         if self.task:
             self.task.cancel()
+            try:
+                await self.task
+            except asyncio.CancelledError:
+                pass
         print(f"[SESSION] {self.meeting_id} stopped")
 
     async def _consume_pcm(self):
@@ -32,23 +36,25 @@ class MeetingSession:
         last_id = "0-0"
 
         while self.running:
-            msgs = redis_client.xread(
-                {stream: last_id},
-                block=1000
-            )
+            try:
+                msgs = await redis_client.xread(
+                    {stream: last_id},
+                    block=1000
+                )
 
-            for _, entries in msgs:
-                for msg_id, data in entries:
-                    pcm_int16 = np.frombuffer(data[b"pcm"], dtype=np.int16)
-                    pcm = pcm_int16.astype(np.float32) / 32768.0
+                for _, entries in msgs:
+                    for msg_id, data in entries:
+                        pcm = np.frombuffer(data[b"pcm"], dtype=np.float32)
+                        audio = self.buffer.add(pcm)
 
-                    audio = self.buffer.add(pcm)
-                    print("PCM received:", len(data[b"pcm"]))
+                        if audio is not None:
+                            results = self.pipeline.process(audio)
+                            for r in results:
+                                print(r)
 
+                        last_id = msg_id
 
-                    if audio is not None:
-                        results = self.pipeline.process(audio)
-                        for r in results:
-                            print(r)
+            except asyncio.CancelledError:
+                print(f"[SESSION] {self.meeting_id} cancelled")
+                break
 
-                    last_id = msg_id
