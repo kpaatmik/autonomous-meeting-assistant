@@ -5,6 +5,7 @@ class TranscriptionService:
     def __init__(self, meeting_id: str, model_name="base"):
         self.meeting_id = meeting_id
         self.model = whisper.load_model(model_name)
+        print(f"[ASR] Whisper model '{self.model}' loaded for meeting {meeting_id}")
 
     def transcribe_segment(self, audio_segment: np.ndarray):
         """

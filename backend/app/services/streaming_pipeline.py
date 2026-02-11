@@ -19,12 +19,13 @@ class StreamingPipeline:
             if len(speaker_audio) == 0:
                 continue
 
-            #text = self.asr.transcribe_segment(speaker_audio)
+            text = self.asr.transcribe_segment(speaker_audio)
 
             results.append({
                 "speaker": seg["speaker"],
                 "start": seg["start"],
-                "end": seg["end"]
+                "end": seg["end"],
+                "text": text
                 
             })
 
