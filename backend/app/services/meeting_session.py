@@ -63,7 +63,7 @@ class MeetingSession:
                                 continue
                             
                             pcm_bytes = data[b"pcm"]
-                            print(f"[PCM] Got chunk: {len(pcm_bytes)} bytes")
+                            #print(f"[PCM] Got chunk: {len(pcm_bytes)} bytes")
                             
                             pcm = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
                             

@@ -13,12 +13,13 @@ class DiarizationService:
         )
 
     def diarize(self, audio, sample_rate=16000):
+        print(f"[DIARIZATION] Processing audio of length {len(audio)/sample_rate:.2f} seconds")
         tmp = f"/tmp/{uuid.uuid4()}.wav"
         sf.write(tmp, audio, sample_rate)
 
         diarization = self.pipeline(tmp)
         segments = []
-
+        print(f"[DIARIZATION] Found {len(diarization.itertracks())} segments")
         for turn, _, speaker in diarization.itertracks(yield_label=True):
             segments.append({
                 "speaker": speaker,
