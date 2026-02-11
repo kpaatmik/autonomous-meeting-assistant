@@ -47,6 +47,7 @@ class MeetingSession:
 
                 for _, entries in msgs:
                     for msg_id, data in entries:
+                        print("Redis entry keys:", data.keys())
                         pcm = np.frombuffer(data[b"pcm"], dtype=np.int16).astype(np.float32) / 32768.0
                         print("Chunk size (samples):", len(pcm))
                         audio = self.buffer.add(pcm)
