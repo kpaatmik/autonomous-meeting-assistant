@@ -11,15 +11,19 @@ class DiarizationService:
             use_auth_token=os.getenv("HUGGINGFACE_HUB_TOKEN")
             
         )
+        print(f"{self.pipeline} loaded for meeting {meeting_id}")
 
     def diarize(self, audio, sample_rate=16000):
-        print(f"[DIARIZATION] Processing audio of length {len(audio)/sample_rate:.2f} seconds")
-        tmp = f"/tmp/{uuid.uuid4()}.wav"
-        sf.write(tmp, audio, sample_rate)
+        print(f"[DIARIZATION] Starting diarization for audio of length {len(audio)/sample_rate:.2f} seconds")
+        waveform = audio.reshape(1, -1)
 
-        diarization = self.pipeline(tmp)
+        diarization = self.pipeline({
+            "waveform": waveform,
+            "sample_rate": sample_rate
+        })
+
         segments = []
-        print(f"[DIARIZATION] Found {len(diarization.itertracks())} segments")
+        print(f"[DIARIZATION] Diarization completed, found {len(diarization.itertracks())} segments")
         for turn, _, speaker in diarization.itertracks(yield_label=True):
             segments.append({
                 "speaker": speaker,
@@ -27,5 +31,5 @@ class DiarizationService:
                 "end": turn.end
             })
 
-        os.remove(tmp)
         return segments
+
