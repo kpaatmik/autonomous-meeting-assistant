@@ -33,7 +33,7 @@ class MeetingSession:
 
     async def _consume_pcm(self):
         stream = f"meeting:{self.meeting_id}:pcm"
-        last_id = "0-0"
+        last_id = "$"
 
         while self.running:
             try:
