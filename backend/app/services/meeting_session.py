@@ -74,9 +74,17 @@ class MeetingSession:
 
                             if audio is not None:
                                 print(f"[PCM] Buffer ready ({len(audio)} samples), processing...")
-                                results = self.pipeline.process(audio)
+
+                                loop = asyncio.get_running_loop()
+                                results = await loop.run_in_executor(
+                                    None,
+                                    self.pipeline.process,
+                                    audio
+                                )
+
                                 for r in results:
                                     print(f"[RESULT] {r}")
+
                             
                             # Update position AFTER successful processing
                             last_id = msg_id
