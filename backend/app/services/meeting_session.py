@@ -68,7 +68,7 @@ class MeetingSession:
                             pcm = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
                             
                             energy = np.mean(np.abs(pcm))
-                            print(f"[PCM] Energy: {energy:.6f}")
+                            #print(f"[PCM] Energy: {energy:.6f}")
 
                             audio = self.buffer.add(pcm)
 
