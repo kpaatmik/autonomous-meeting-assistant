@@ -11,7 +11,7 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
   await page.goto(meeting_url, { waitUntil: "networkidle2" });
   await delay(8000);
 
-  //  Set bot name
+  // Set bot name
   try {
     await page.waitForSelector('input[name="displayName"]', { timeout: 5000 });
     await page.type('input[name="displayName"]', bot_name || "AI Assistant");
@@ -19,7 +19,7 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
     console.log(`[${meeting_id}] Name input not found`);
   }
 
-  //  Mute mic & camera
+  // Mute mic & camera
   await page.evaluate(() => {
     document.querySelector('[aria-label*="microphone"]')?.click();
     document.querySelector('[aria-label*="camera"]')?.click();
@@ -27,7 +27,7 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
 
   await delay(3000);
 
-  //  Click Join
+  // Click Join
   const joined = await page.evaluate(() => {
     const btn =
       document.querySelector('[data-testid="prejoin.joinMeeting"]') ||
@@ -47,26 +47,26 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
     return;
   }
 
-  console.log(`[${meeting_id}]  Bot joined meeting`);
-  await delay(5000); // allow WebRTC graph to stabilize
+  console.log(`[${meeting_id}] Bot joined meeting`);
+  await delay(5000); // allow Jitsi to stabilize
 
   // ================================
-  // AUDIO CAPTURE STARTS HERE
+  // AUDIO CAPTURE (JITSI NATIVE)
   // ================================
 
-  //  WebSocket to backend
   const socket = new WebSocket(
-  `ws://127.0.0.1:8000/ws/audio/${meeting_id}`
-);
+    `ws://127.0.0.1:8000/ws/audio/${meeting_id}`
+  );
 
-socket.onopen = async () => {
+  socket.onopen = async () => {
   console.log(`[${meeting_id}] 🔊 Audio WebSocket connected`);
 
   try {
     await delay(3000);
 
-    await page.evaluate(async () => {
-      await new Promise(res => setTimeout(res, 8000));
+    const success = await page.evaluate(async () => {
+      // Allow Jitsi to fully attach audio elements
+      await new Promise(r => setTimeout(r, 3000));
 
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       const audioCtx = new AudioCtx({ sampleRate: 16000 });
@@ -75,87 +75,66 @@ socket.onopen = async () => {
         await audioCtx.resume();
       }
 
-      try {
-        // Use localhost instead of hardcoded IP
-        await audioCtx.audioWorklet.addModule(
-          "http://localhost:8000/static/audioWorklet.js"
-        );
-      } catch (err) {
-        console.error("Failed to load audioWorklet.js:", err.message);
-        throw err;
-      }
+      await audioCtx.audioWorklet.addModule(
+        "http://localhost:8000/static/audioWorklet.js"
+      );
 
       const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
-
-      worklet.port.onmessage = e => {
-        window.sendPCM(e.data);
-      };
+      worklet.port.onmessage = e => window.sendPCM(e.data);
 
       const audioElements = Array.from(document.querySelectorAll("audio"));
-
-      if (audioElements.length === 0) {
-        console.warn("No remote audio elements found");
-        return;
+      if (!audioElements.length) {
+        console.warn("No Jitsi audio elements found yet");
+        return false;
       }
 
       audioElements.forEach(audioEl => {
         try {
-          const source = audioCtx.createMediaElementSource(audioEl);
+          const stream = audioEl.captureStream();
+          const source = audioCtx.createMediaStreamSource(stream);
           source.connect(worklet);
-          worklet.connect(audioCtx.destination);
         } catch (err) {
-          console.warn("Audio element connection error:", err.message);
+          console.warn("Failed to tap audio element:", err.message);
         }
       });
+
+      return true;
     });
 
-    console.log(`[${meeting_id}] 🎙 PCM audio streaming started`);
+    if (success) {
+      console.log(`[${meeting_id}] 🎙 PCM audio streaming started`);
+    } else {
+      console.warn(
+        `[${meeting_id}] ⚠️ Audio not ready yet (no remote speakers)`
+      );
+      // DO NOT close socket — audio may appear later
+    }
   } catch (err) {
     console.error(
-      `[${meeting_id}] Audio capture failed:`,
+      `[${meeting_id}] ❌ Audio capture setup failed:`,
       err.message
     );
   }
 };
 
 
-socket.on("error", err => {
-  console.error(`[${meeting_id}]  WS error:`, err.message);
-});
+  socket.on("error", err => {
+    console.error(`[${meeting_id}] WS error:`, err.message);
+  });
 
-socket.on("close", code => {
-  console.log(`[${meeting_id}] 🔌 WS closed`, code);
-});
+  socket.on("close", code => {
+    console.log(`[${meeting_id}] 🔌 WS closed`, code);
+  });
 
-  // 5️⃣ Expose Node function to browser
+  // Expose PCM sender
   await page.exposeFunction("sendPCM", chunk => {
     if (socket.readyState === WebSocket.OPEN) {
       socket.send(Buffer.from(chunk.buffer));
     }
   });
-
-  // // 6️⃣ Inject AudioWorklet & capture PCM
-  // await page.evaluate(async () => {
-  //   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-  //   const audioCtx = new AudioContext({ sampleRate: 16000 });
-  //   await audioCtx.audioWorklet.addModule("http://20.205.17.97:8000/static/audioWorklet.js");
-
-  //   const source = audioCtx.createMediaStreamSource(stream);
-  //   const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
-
-  //   worklet.port.onmessage = e => {
-  //     window.sendPCM(e.data);
-  //   };
-
-  //   source.connect(worklet);
-  // });
-
-  // console.log(`[${meeting_id}] 🎙 PCM audio streaming started`);
 }
 
 // ENTRY POINT
-
 try {
   const payload = JSON.parse(process.argv[2]);
 
@@ -173,4 +152,3 @@ try {
   console.error("❌ Invalid input:", err.message);
   process.exit(1);
 }
-
