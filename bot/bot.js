@@ -89,26 +89,27 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
   );
 
   await page.exposeFunction("sendPCM", chunk => {
-  try {
-    if (!chunk || !chunk.length) return;
-    if (socket.readyState !== WebSocket.OPEN) return;
+    try {
+      if (!chunk || chunk.length === 0) return;
+      if (socket.readyState !== WebSocket.OPEN) return;
 
-    console.log("➡ Sending PCM:", chunk.length); // ADD THIS
+      // Convert to Buffer if it's typed array
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
 
-    socket.send(Buffer.from(chunk));
-  } catch (err) {
-    console.error("sendPCM error:", err.message);
-  }
-});
-
+      console.log(`[${meeting_id}] ➡ Sending PCM: ${buffer.length} bytes`);
+      socket.send(buffer);
+    } catch (err) {
+      console.error(`[${meeting_id}] sendPCM error: ${err.message}`);
+    }
+  });
 
   socket.on("open", async () => {
-    console.log(`[${meeting_id}] Audio socket connected`);
+    console.log(`[${meeting_id}] 🔊 Audio socket connected`);
 
     try {
       await delay(3000);
 
-      await page.evaluate(async () => {
+      const setupSuccess = await page.evaluate(async () => {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         const audioCtx = new AudioCtx({ sampleRate: 16000 });
 
@@ -116,13 +117,20 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
           await audioCtx.resume();
         }
 
-        await audioCtx.audioWorklet.addModule(
-          "http://localhost:8000/static/audioWorklet.js"
-        );
+        try {
+          await audioCtx.audioWorklet.addModule(
+            "http://localhost:8000/static/audioWorklet.js"
+          );
+          console.log("[AudioWorklet] Module loaded");
+        } catch (err) {
+          console.error("[AudioWorklet] Load failed:", err.message);
+          return false;
+        }
 
         const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
 
         worklet.port.onmessage = e => {
+          console.log(`[AudioWorklet] Got data: ${e.data.length} bytes`);
           window.sendPCM(e.data);
         };
 
@@ -131,17 +139,27 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
             const stream = audioEl.captureStream();
             const source = audioCtx.createMediaStreamSource(stream);
             source.connect(worklet);
-          } catch {}
+            console.log("[Audio] Attached element");
+            return true;
+          } catch (err) {
+            console.warn("[Audio] Attach failed:", err.message);
+            return false;
+          }
         }
 
         // Attach existing audio
-        document.querySelectorAll("audio").forEach(attachAudioElement);
+        let count = 0;
+        document.querySelectorAll("audio").forEach(el => {
+          if (attachAudioElement(el)) count++;
+        });
+        console.log(`[Audio] Attached ${count} existing elements`);
 
         // Observe new audio elements
         const observer = new MutationObserver(mutations => {
           mutations.forEach(m => {
             m.addedNodes.forEach(node => {
               if (node.tagName === "AUDIO") {
+                console.log("[Audio] New element detected");
                 attachAudioElement(node);
               }
             });
@@ -152,12 +170,18 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
           childList: true,
           subtree: true
         });
+
+        return count > 0;
       });
 
-      console.log(`[${meeting_id}] PCM streaming started`);
+      if (setupSuccess) {
+        console.log(`[${meeting_id}] 🎙 PCM streaming active`);
+      } else {
+        console.warn(`[${meeting_id}] No audio elements found yet`);
+      }
 
     } catch (err) {
-      console.error(`[${meeting_id}] Audio setup failed: ${err.message}`);
+      console.error(`[${meeting_id}] Audio setup error: ${err.message}`);
     }
   });
 
