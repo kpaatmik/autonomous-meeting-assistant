@@ -93,19 +93,21 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
       if (!chunk || chunk.length === 0) return;
       if (socket.readyState !== WebSocket.OPEN) return;
 
-      // Convert typed array to Buffer properly
+      // chunk comes as plain object from page context
+      // Convert it to a proper typed array
       let buffer;
+      
       if (chunk instanceof ArrayBuffer) {
         buffer = Buffer.from(chunk);
-      } else if (ArrayBuffer.isView(chunk)) {
-        // Int16Array, Float32Array, etc.
-        buffer = Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+      } else if (typeof chunk === "object" && chunk.length) {
+        // Convert plain object/array to Int16Array then Buffer
+        const int16 = new Int16Array(Object.values(chunk));
+        buffer = Buffer.from(int16.buffer);
       } else if (Array.isArray(chunk)) {
-        // Plain array - convert to Int16Array first
         const int16 = new Int16Array(chunk);
         buffer = Buffer.from(int16.buffer);
       } else {
-        console.warn("[PCM] Unknown data type:", typeof chunk);
+        console.warn("[PCM] Unknown data type:", typeof chunk, "keys:", Object.keys(chunk || {}));
         return;
       }
 
@@ -143,9 +145,10 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
         const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
 
         worklet.port.onmessage = e => {
-          // e.data is already Int16Array from audioWorklet
-          console.log(`[AudioWorklet] Sending: ${e.data.length} samples`);
-          window.sendPCM(e.data);
+          // Convert Int16Array to plain array for crossing context boundary
+          const arrayData = Array.from(e.data);
+          console.log(`[AudioWorklet] Sending: ${arrayData.length} samples`);
+          window.sendPCM(arrayData);
         };
 
         function attachAudioElement(audioEl) {
