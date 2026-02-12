@@ -7,6 +7,7 @@ class StreamingPipeline:
         self.asr = TranscriptionService(meeting_id)
 
     def process(self, audio, sample_rate=16000):
+        
         diarized = self.diar.diarize(audio, sample_rate)
         results = []
 
@@ -14,7 +15,7 @@ class StreamingPipeline:
             start = int(seg["start"] * sample_rate)
             end = int(seg["end"] * sample_rate)
             speaker_audio = audio[start:end]
-
+            print(f"[PIPELINE] Speaker {seg['speaker']} segment: {len(speaker_audio)/sample_rate:.2f} seconds")
             if len(speaker_audio) == 0:
                 continue
 
@@ -25,6 +26,7 @@ class StreamingPipeline:
                 "start": seg["start"],
                 "end": seg["end"],
                 "text": text
+                
             })
 
         return results

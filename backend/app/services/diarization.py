@@ -3,19 +3,28 @@ import numpy as np
 import soundfile as sf
 import uuid, os
 from dotenv import load_dotenv
+import torch
 load_dotenv()
 class DiarizationService:
     def __init__(self, meeting_id):
         self.pipeline = Pipeline.from_pretrained(
-            "pyannote/speaker-diarization"
+            "pyannote/speaker-diarization@2.1",
+            use_auth_token=os.getenv("HUGGINGFACE_HUB_TOKEN")
             
         )
+        print(f"{self.pipeline} loaded for meeting {meeting_id}")
 
     def diarize(self, audio, sample_rate=16000):
-        tmp = f"/tmp/{uuid.uuid4()}.wav"
-        sf.write(tmp, audio, sample_rate)
+        print(f"[DIARIZATION] Starting diarization for audio of length {len(audio)/sample_rate:.2f} seconds")
 
-        diarization = self.pipeline(tmp)
+        # Convert numpy -> torch tensor
+        waveform = torch.from_numpy(audio).float().unsqueeze(0)
+
+        diarization = self.pipeline({
+            "waveform": waveform,
+            "sample_rate": sample_rate
+        })
+
         segments = []
 
         for turn, _, speaker in diarization.itertracks(yield_label=True):
@@ -25,5 +34,4 @@ class DiarizationService:
                 "end": turn.end
             })
 
-        os.remove(tmp)
         return segments

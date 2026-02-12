@@ -11,6 +11,8 @@ async def audio_ws(ws: WebSocket, meeting_id: str):
     try:
         while True:
             data = await ws.receive_bytes()
-            publish_pcm(meeting_id, data)
+            #print(f"[WS] Received PCM chunk: {len(data)} bytes from {meeting_id}")
+            await publish_pcm(meeting_id, data)
+
     except Exception as e:
         print(f"[WS] Audio disconnected {meeting_id}: {e}")
