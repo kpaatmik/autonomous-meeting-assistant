@@ -4,7 +4,7 @@ import torch
 
 class QuestionDetector:
     """
-    Question detector using FLAN-T5 Base
+    Question detector using FLAN-T5 Base this is demo
     """
 
     def __init__(self):
