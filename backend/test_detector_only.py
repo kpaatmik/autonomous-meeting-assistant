@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from services.question_detector import get_question_detector
+from app.services.question_detector import get_question_detector
 import redis
 
 logging.basicConfig(level=logging.DEBUG)
