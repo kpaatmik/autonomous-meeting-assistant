@@ -41,6 +41,8 @@ class QuestionDetector:
             logger.debug("Redis client created")
         return self.redis_client
     
+    
+
     async def classify_text(self, text: str) -> dict:
         """
         Classify if text is a question using FLAN-T5
@@ -55,37 +57,42 @@ class QuestionDetector:
             }
         """
         try:
-            logger.debug(f"Classifying text: '{text[:80]}...'")
+            # Improved prompt for better question detection
+            prompt = f"Classify if this is a question: '{text}'. Answer only 'Yes' or 'No'."
             
-            # Create prompt for FLAN-T5
-            prompt = f"Is this a question? Answer with 'yes' or 'no'.\nText: {text}"
+            logger.debug(f"Classification prompt: {prompt}")
             
-            # Run model in thread pool to avoid blocking event loop
-            loop = asyncio.get_event_loop()
+            # Run inference in thread pool
+            loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
                 None,
-                lambda: self.classifier(prompt, max_length=10)
+                lambda: self.classifier(prompt, max_length=10, num_return_sequences=1)
             )
             
             response = result[0]['generated_text'].strip().lower()
-            is_question = 'yes' in response
+            logger.debug(f"Model raw response: '{response}'")
             
-            logger.debug(f"Classification result: is_question={is_question}, response='{response}'")
+            # More robust detection
+            is_question = response.startswith('yes') or 'yes' in response.split()
+            
+            # Calculate confidence (simple heuristic)
+            confidence = 0.9 if is_question else 0.1  # Adjust based on response certainty
             
             return {
                 "is_question": is_question,
-                "confidence": 0.95 if is_question else 0.85,
+                "confidence": confidence,
                 "text": text,
                 "response": response,
                 "error": None
             }
+            
         except Exception as e:
-            logger.error(f"Error classifying text: {e}", exc_info=True)
+            logger.error(f"Error classifying text: {e}")
             return {
                 "is_question": False,
                 "confidence": 0.0,
                 "text": text,
-                "response": "error",
+                "response": "",
                 "error": str(e)
             }
     
