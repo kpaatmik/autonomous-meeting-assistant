@@ -124,7 +124,7 @@ async def manual_test():
     logger.info("=== Manual Classification Test ===\n")
     
     try:
-        from services.question_detector import get_question_detector
+        from app.services.question_detector import get_question_detector
         
         detector = get_question_detector()
         
