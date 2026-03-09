@@ -75,8 +75,8 @@ async def demo():
             logger.error(f"Failed to push segment {i}: {e}\n")
     
     # Wait for question detection to process
-    logger.info("\n⏳ Waiting for question detection (15 seconds)...\n")
-    await asyncio.sleep(15)
+    logger.info("\n⏳ Waiting for question detection (30 seconds)...\n")
+    await asyncio.sleep(30)
     
     # Check what questions were detected
     logger.info(f"\n=== Checking {questions_stream} ===\n")
