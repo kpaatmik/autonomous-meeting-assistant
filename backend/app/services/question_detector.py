@@ -16,22 +16,21 @@ logger = logging.getLogger(__name__)
 
 class QuestionDetector:
     def __init__(self):
-        logger.info("Initializing QuestionDetector with google/flan-t5-base...")
+        logger.info("Initializing QuestionDetector with question-vs-statement classifier...")
         
-        # Load FLAN-T5 model for question classification
         try:
+            # Use a dedicated question detection model
             self.classifier = pipeline(
-                "text2text-generation",
-                model="google/flan-t5-base",
-                device=-1,  # -1 for CPU, 0 for GPU if available
-                trust_remote_code=True
+                "text-classification", 
+                model="shahrukhx01/question-vs-statement-classifier",
+                return_all_scores=True
             )
-            logger.info("FLAN-T5 model loaded successfully")
+            logger.info("Question detection model loaded successfully")
         except Exception as e:
-            logger.error(f"Error loading FLAN-T5 model: {e}")
+            logger.error(f"Failed to load question detector: {e}")
             raise
         
-        self.redis_client = None  # Will be initialized on demand
+        self.redis_client = None
         logger.info("QuestionDetector initialized")
     
     async def _get_redis_client(self):
@@ -45,7 +44,7 @@ class QuestionDetector:
 
     async def classify_text(self, text: str) -> dict:
         """
-        Classify if text is a question using FLAN-T5
+        Classify if text is a question using dedicated classifier
         
         Returns:
             {
@@ -57,26 +56,30 @@ class QuestionDetector:
             }
         """
         try:
-            # Improved prompt for better question detection
-            prompt = f"Classify if this is a question: '{text}'. Answer only 'Yes' or 'No'."
+            logger.debug(f"Classifying text: '{text}'")
             
-            logger.debug(f"Classification prompt: {prompt}")
-            
-            # Run inference in thread pool
+            # Run classification in thread pool
             loop = asyncio.get_running_loop()
-            result = await loop.run_in_executor(
-                None,
-                lambda: self.classifier(prompt, max_length=10, num_return_sequences=1)
-            )
+            results = await loop.run_in_executor(None, lambda: self.classifier(text))
             
-            response = result[0]['generated_text'].strip().lower()
-            logger.debug(f"Model raw response: '{response}'")
+            # Results format: [{'label': 'LABEL_0', 'score': 0.9}, {'label': 'LABEL_1', 'score': 0.1}]
+            # LABEL_0 = statement, LABEL_1 = question (based on model)
             
-            # More robust detection
-            is_question = response.startswith('yes') or 'yes' in response.split()
+            question_score = 0.0
+            statement_score = 0.0
             
-            # Calculate confidence (simple heuristic)
-            confidence = 0.9 if is_question else 0.1  # Adjust based on response certainty
+            for result in results[0]:  # results is list of lists
+                if result['label'] == 'LABEL_1':  # Question
+                    question_score = result['score']
+                elif result['label'] == 'LABEL_0':  # Statement
+                    statement_score = result['score']
+            
+            is_question = question_score > statement_score
+            confidence = max(question_score, statement_score)
+            
+            response = f"Question: {question_score:.3f}, Statement: {statement_score:.3f}"
+            
+            logger.debug(f"Classification result: is_question={is_question}, confidence={confidence:.3f}")
             
             return {
                 "is_question": is_question,
