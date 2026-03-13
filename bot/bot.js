@@ -14,7 +14,7 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
   await page.evaluateOnNewDocument(() => {
     const originalError = console.error;
 
-    console.log = () => {};
+    //console.log = () => {};
     console.debug = () => {};
     console.info = () => {};
     console.warn = () => {};
@@ -170,7 +170,7 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
 
         // Attach existing audio
         let count = 0;
-        document.querySelectorAll("audio").forEach(el => {
+        document.querySelectorAll("audio, video").forEach(el => {
           if (attachAudioElement(el)) count++;
         });
 
