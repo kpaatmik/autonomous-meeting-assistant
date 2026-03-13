@@ -111,7 +111,7 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
         return;
       }
 
-      //console.log(`[${meeting_id}] ➡ Sending PCM: ${buffer.length} bytes`);
+      console.log(`[${meeting_id}] ➡ Sending PCM: ${buffer.length} bytes`);
       socket.send(buffer);
     } catch (err) {
       console.error(`[${meeting_id}] sendPCM error: ${err.message}`);
