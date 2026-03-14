@@ -140,11 +140,11 @@ class MeetingSession:
                                     
                                     # Persist segment immediately for reference
                                     # (can also be done after question detection if needed)
-                                    """
+                                    
                                     asyncio.create_task(
                                         asyncio.to_thread(persistence.save_segment, self.meeting_id, r)
                                     )
-                                    """
+                                    
                                     
                             
                             # Update position AFTER successful processing
