@@ -23,7 +23,7 @@ class QuestionDetector:
             self.classifier = pipeline(
                 "text-classification", 
                 model="shahrukhx01/question-vs-statement-classifier",
-                return_all_scores=True
+                return_all_scores=None
             )
             logger.info("Question detection model loaded successfully")
         except Exception as e:
