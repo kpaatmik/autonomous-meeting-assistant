@@ -10,7 +10,6 @@ async function getBrowser() {
       headless: true,
       args: [
         "--use-fake-ui-for-media-stream",
-        "--use-fake-device-for-media-stream", // 🔥 THIS IS REQUIRED
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--autoplay-policy=no-user-gesture-required"
