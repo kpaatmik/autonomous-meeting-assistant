@@ -100,8 +100,7 @@ class MeetingSession:
                             
                             energy = np.mean(np.abs(pcm))
                             #print(f"[PCM] Energy: {energy:.6f}")
-                            if energy < 0.01:
-                                continue
+                            
 
 
                             audio = self.buffer.add(pcm)
