@@ -86,11 +86,11 @@ class MeetingSession:
                     continue
                 
                 for stream_key, entries in msgs:
-                    for msg_id, data in entries:
+                    for pcm_msg_id, data in entries:
                         try:
                             if b"pcm" not in data:
                                 print(f"[PCM] Warning: no 'pcm' key in message")
-                                last_id = msg_id
+                                last_id = pcm_msg_id
                                 continue
                             
                             pcm_bytes = data[b"pcm"]
@@ -121,9 +121,9 @@ class MeetingSession:
                                     # Push segment to Redis stream for question detection
                                     # This ensures no loss and allows async question detection
                                     try:
-                                        stream = f"meeting:{self.meeting_id}:segments"
-                                        msg_id = await redis_client.xadd(
-                                            stream,
+                                        segment_stream   = f"meeting:{self.meeting_id}:segments"
+                                        segment_msg_id  = await redis_client.xadd(
+                                            segment_stream,
                                             {
                                                 'text': r.get('text', ''),
                                                 'speaker': r.get('speaker', 'unknown'),
@@ -131,8 +131,8 @@ class MeetingSession:
                                                 'end': str(r.get('end', 0))
                                             }
                                         )
-                                        logger.debug(f"Segment pushed to stream {stream} with id: {msg_id}")
-                                        print(f"[SEGMENT] Pushed to stream with id: {msg_id}")
+                                        logger.debug(f"Segment pushed to stream {stream} with id: {pcm_msg_id}")
+                                        print(f"[SEGMENT] Pushed to stream with id: {segment_msg_id}")
                                     except Exception as e:
                                         logger.error(f"Error pushing segment to stream: {e}")
                                     
@@ -146,7 +146,7 @@ class MeetingSession:
                                     
                             
                             # Update position AFTER successful processing
-                            last_id = msg_id
+                            last_id = pcm_msg_id
 
                         except Exception as e:
                             print(f"[PCM] Entry error: {e}")
