@@ -141,6 +141,7 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
         }
 
         const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
+        worklet.connect(audioCtx.destination);
 
         worklet.port.onmessage = e => {
           const arrayData = Array.from(e.data);
@@ -165,7 +166,7 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
 
             const source = audioCtx.createMediaStreamSource(stream);
             source.connect(worklet);
-            worklet.connect(audioCtx.destination);
+            //worklet.connect(audioCtx.destination);
 
             attached.add(el);
 
