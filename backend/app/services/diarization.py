@@ -35,4 +35,3 @@ class DiarizationService:
             })
 
         return segments
-
