@@ -120,7 +120,7 @@ class QuestionDetector:
             while True:
                 try:
                     # Read segments from Redis stream
-                    logger.debug(f"Waiting for segments from {stream}...")
+                    #logger.debug(f"Waiting for segments from {stream}...")
                     msgs = await asyncio.wait_for(
                         redis_client.xread(
                             {stream: last_id},
@@ -168,7 +168,7 @@ class QuestionDetector:
                                                 'original_response': classification['response']
                                             }
                                         )
-                                        logger.debug(f"Question pushed to {question_stream} with id: {question_msg_id}")
+                                        #logger.debug(f"Question pushed to {question_stream} with id: {question_msg_id}")
                                     except Exception as e:
                                         logger.error(f"Failed to push question to stream: {e}")
                                 else:
