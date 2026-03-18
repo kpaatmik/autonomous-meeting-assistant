@@ -23,7 +23,7 @@ class QuestionDetector:
             self.classifier = pipeline(
                 "text-classification", 
                 model="shahrukhx01/question-vs-statement-classifier",
-                return_all_scores=None
+                return_all_scores=True
             )
             logger.info("Question detection model loaded successfully")
         except Exception as e:
@@ -153,6 +153,7 @@ class QuestionDetector:
                                 classification['meeting_id'] = meeting_id
                                 
                                 if classification['is_question']:
+                                    
                                     logger.info(f"✓ QUESTION DETECTED from '{speaker}': '{segment_text[:60]}...'")
                                     
                                     # Push to questions stream for LLM module
