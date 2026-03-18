@@ -2,11 +2,13 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 import asyncio
 import logging
-from services.scheduler import start_scheduler, get_scheduler
-from api.meetings import router as meetings_router
-from services.meeting_manager import manager
-from api.audio_ws import router as audio_ws_router
-from services.scheduler import start_scheduler, set_event_loop
+from pathlib import Path
+
+from app.api.meetings import router as meetings_router
+from app.api.audio_ws import router as audio_ws_router
+from app.services.scheduler import start_scheduler, get_scheduler, set_event_loop
+from app.services.meeting_manager import manager
+
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -49,4 +51,8 @@ app.add_middleware(
 )
 app.include_router(meetings_router)
 app.include_router(audio_ws_router)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount(
+    "/static",
+    StaticFiles(directory=Path(__file__).parent.parent / "static"),
+    name="static"
+)
