@@ -2,11 +2,11 @@ import asyncio
 import logging
 import redis.asyncio as redis
 import numpy as np
-from services.bot_launcher import launch_bot
-from services.audio_buffer import AudioBuffer
-from services.streaming_pipeline import StreamingPipeline
-from services.persistence import get_persistence
-from services.question_detector import get_question_detector
+from app.services.bot_launcher import launch_bot
+from app.services.audio_buffer import AudioBuffer
+from app.services.streaming_pipeline import StreamingPipeline
+from app.services.persistence import get_persistence
+from app.services.question_detector import get_question_detector
 
 logger = logging.getLogger(__name__)
 

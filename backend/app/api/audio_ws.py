@@ -1,5 +1,5 @@
 from fastapi import WebSocket, APIRouter
-from services.pubsub import publish_pcm
+from app.services.pubsub import publish_pcm
 
 router = APIRouter()
 

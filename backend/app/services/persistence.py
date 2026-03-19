@@ -9,7 +9,7 @@ import logging
 import faiss
 import numpy as np
 
-from services.embeddings import EmbeddingService
+from app.services.embeddings import EmbeddingService
 
 # Configure logging for debugging
 logging.basicConfig(level=logging.DEBUG)
@@ -167,7 +167,31 @@ class Persistence:
             self._save_faiss(meeting_id, index, meta)
             logger.info(f"FAISS index saved successfully for meeting_id: {meeting_id}")
 
+
         return segment_id
+
+
+
+
+	def get_all_segments(self, meeting_id: str):
+    		conn = self._get_connection()
+    		cursor = conn.cursor()
+
+    		cursor.execute("""
+        		SELECT id, meeting_id, speaker, start_time, end_time, text
+        		FROM segments
+        		WHERE meeting_id = ?
+        		ORDER BY start_time ASC
+		""", (meeting_id,))
+
+    		rows = cursor.fetchall()
+    		conn.close()
+
+   	 	return rows	
+
+
+
+
 
     def search(self, meeting_id: str, query: str, top_k: int = 5):
         """
@@ -237,3 +261,20 @@ def get_persistence() -> Persistence:
         logger.info("Creating new Persistence instance")
         _persistence = Persistence()
     return _persistence
+"""
+def get_all_segments(self, meeting_id: str):
+    conn = self._get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id, meeting_id, speaker, start_time, end_time, text
+        FROM segments
+        WHERE meeting_id = ?
+        ORDER BY start_time ASC
+    """, (meeting_id,))
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    return rows
+"""

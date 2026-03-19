@@ -1,6 +1,6 @@
 import logging
 from transformers import pipeline
-from services.persistence import get_persistence
+from app.services.persistence import get_persistence
 
 logger = logging.getLogger(__name__)
 
