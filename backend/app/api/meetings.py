@@ -5,7 +5,7 @@ import pytz
 from services.scheduler import get_scheduler
 from services.meeting_manager import manager
 from storage.meetings import MEETINGS
-from services.summary_service import summarize_meeting
+from services.summary_service import get_summarizer
 from services.rag_service import ask_meeting
 
 router = APIRouter(prefix="/meetings", tags=["Meetings"])
@@ -62,7 +62,11 @@ async def search_meeting(meeting_id: str, q: str, top_k: int = 5):
     return {"results": out}
 
 
-
+@router.get("/{meeting_id}/summary")
+async def get_summary(meeting_id: str):
+    summarizer = get_summarizer()
+    result = summarizer.summarize_meeting(meeting_id)
+    return result
 
 
 
