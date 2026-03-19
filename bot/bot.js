@@ -93,14 +93,11 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
       if (!chunk || chunk.length === 0) return;
       if (socket.readyState !== WebSocket.OPEN) return;
 
-      // chunk comes as plain object from page context
-      // Convert it to a proper typed array
       let buffer;
-      
+
       if (chunk instanceof ArrayBuffer) {
         buffer = Buffer.from(chunk);
       } else if (typeof chunk === "object" && chunk.length) {
-        // Convert plain object/array to Int16Array then Buffer
         const int16 = new Int16Array(Object.values(chunk));
         buffer = Buffer.from(int16.buffer);
       } else if (Array.isArray(chunk)) {
@@ -111,8 +108,8 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
         return;
       }
 
-      //console.log(`[${meeting_id}] ➡ Sending PCM: ${buffer.length} bytes`);
       socket.send(buffer);
+
     } catch (err) {
       console.error(`[${meeting_id}] sendPCM error: ${err.message}`);
     }
@@ -125,6 +122,7 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
       await delay(3000);
 
       const setupSuccess = await page.evaluate(async () => {
+
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         const audioCtx = new AudioCtx({ sampleRate: 16000 });
 
@@ -143,36 +141,66 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
         }
 
         const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
+        worklet.connect(audioCtx.destination);
 
         worklet.port.onmessage = e => {
-          // Convert Int16Array to plain array for crossing context boundary
           const arrayData = Array.from(e.data);
-          console.log(`[AudioWorklet] Sending: ${arrayData.length} samples`);
           window.sendPCM(arrayData);
         };
 
-        function attachAudioElement(audioEl) {
+        // ==================================================
+        // 🔥 RELIABLE STREAM ATTACH SYSTEM
+        // ==================================================
+
+        const attached = new WeakSet();
+
+        function attachAudioElement(el) {
+
+          if (attached.has(el)) return false;
+
           try {
-            const stream = audioEl.captureStream
-              ? audioEl.captureStream()
-              : audioEl.mozCaptureStream();
+
+            const stream = el.captureStream
+              ? el.captureStream()
+              : el.mozCaptureStream();
 
             const source = audioCtx.createMediaStreamSource(stream);
             source.connect(worklet);
-            worklet.connect(audioCtx.destination);
-            console.log("[Audio] Element attached");
+            //worklet.connect(audioCtx.destination);
+
+            attached.add(el);
+
             return true;
+
           } catch (err) {
-            console.warn("[Audio] Attach failed:", err.message);
             return false;
           }
         }
 
-        // Attach existing audio
+        // Attach existing elements
         let count = 0;
-        document.querySelectorAll("audio").forEach(el => {
+        document.querySelectorAll("audio, video").forEach(el => {
           if (attachAudioElement(el)) count++;
         });
+
+        // Watch for new elements (Jitsi frequently recreates streams)
+        const observer = new MutationObserver(() => {
+          document.querySelectorAll("audio, video").forEach(el => {
+            attachAudioElement(el);
+          });
+        });
+
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true
+        });
+
+        // Periodic retry safety
+        setInterval(() => {
+          document.querySelectorAll("audio, video").forEach(el => {
+            attachAudioElement(el);
+          });
+        }, 3000);
 
         return count > 0;
       });
@@ -202,6 +230,7 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
 // ============================================
 
 try {
+
   const payload = JSON.parse(process.argv[2]);
 
   if (!payload.meeting_url || !payload.meeting_id) {

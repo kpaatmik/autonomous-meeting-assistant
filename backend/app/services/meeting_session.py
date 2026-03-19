@@ -1,11 +1,20 @@
 import asyncio
+import logging
 import redis.asyncio as redis
 import numpy as np
 from services.bot_launcher import launch_bot
 from services.audio_buffer import AudioBuffer
 from services.streaming_pipeline import StreamingPipeline
+from services.persistence import get_persistence
+from services.question_detector import get_question_detector
+
+logger = logging.getLogger(__name__)
 
 redis_client = redis.Redis(host="localhost", port=6379)
+
+# shared persistence instance
+persistence = get_persistence()
+question_detector = get_question_detector()
 
 class MeetingSession:
     def __init__(self, meeting_id):
@@ -13,22 +22,44 @@ class MeetingSession:
         self.buffer = AudioBuffer()
         self.pipeline = StreamingPipeline(meeting_id)
         self.running = False
-        self.task = None
+        self.pcm_task = None
+        self.question_detector_task = None  # Task for question detection loop
 
     async def start(self):
         await launch_bot(self.meeting_id)
         self.running = True
-        self.task = asyncio.create_task(self._consume_pcm())
+        
+        # Start PCM consumption task
+        self.pcm_task = asyncio.create_task(self._consume_pcm())
+        logger.info(f"[SESSION] PCM consumer started for {self.meeting_id}")
+        
+        # Start question detection task
+        self.question_detector_task = asyncio.create_task(
+            question_detector.consume_and_detect(self.meeting_id)
+        )
+        logger.info(f"[SESSION] Question detector started for {self.meeting_id}")
+        
         print(f"[SESSION] {self.meeting_id} started")
 
     async def stop(self):
         self.running = False
-        if self.task:
-            self.task.cancel()
+        
+        # Cancel PCM consumer task
+        if self.pcm_task:
+            self.pcm_task.cancel()
             try:
-                await self.task
+                await self.pcm_task
             except asyncio.CancelledError:
-                pass
+                logger.debug(f"[SESSION] PCM task cancelled")
+        
+        # Cancel question detector task
+        if self.question_detector_task:
+            self.question_detector_task.cancel()
+            try:
+                await self.question_detector_task
+            except asyncio.CancelledError:
+                logger.debug(f"[SESSION] Question detector task cancelled")
+        
         print(f"[SESSION] {self.meeting_id} stopped")
 
     async def _consume_pcm(self):
@@ -55,11 +86,11 @@ class MeetingSession:
                     continue
                 
                 for stream_key, entries in msgs:
-                    for msg_id, data in entries:
+                    for pcm_msg_id, data in entries:
                         try:
                             if b"pcm" not in data:
                                 print(f"[PCM] Warning: no 'pcm' key in message")
-                                last_id = msg_id
+                                last_id = pcm_msg_id
                                 continue
                             
                             pcm_bytes = data[b"pcm"]
@@ -69,9 +100,13 @@ class MeetingSession:
                             
                             energy = np.mean(np.abs(pcm))
                             #print(f"[PCM] Energy: {energy:.6f}")
+                            
+
 
                             audio = self.buffer.add(pcm)
 
+                
+                            
                             if audio is not None:
                                 print(f"[PCM] Buffer ready ({len(audio)} samples), processing...")
 
@@ -84,14 +119,40 @@ class MeetingSession:
 
                                 for r in results:
                                     print(f"[RESULT] {r}")
-
+                                    
+                                    # Push segment to Redis stream for question detection
+                                    # This ensures no loss and allows async question detection
+                                    try:
+                                        segment_stream   = f"meeting:{self.meeting_id}:segments"
+                                        segment_msg_id  = await redis_client.xadd(
+                                            segment_stream,
+                                            {
+                                                'text': r.get('text', ''),
+                                                'speaker': r.get('speaker', 'unknown'),
+                                                'start': str(r.get('start', 0)),
+                                                'end': str(r.get('end', 0))
+                                            }
+                                        )
+                                        # logger.debug(f"Segment pushed to stream {stream} with id: {pcm_msg_id}")
+                                        # print(f"[SEGMENT] Pushed to stream with id: {segment_msg_id}")
+                                    except Exception as e:
+                                        logger.error(f"Error pushing segment to stream: {e}")
+                                    
+                                    # Persist segment immediately for reference
+                                    # (can also be done after question detection if needed)
+                                    
+                                    asyncio.create_task(
+                                        asyncio.to_thread(persistence.save_segment, self.meeting_id, r)
+                                    )
+                                    
+                                    
                             
                             # Update position AFTER successful processing
-                            last_id = msg_id
+                            last_id = pcm_msg_id
 
                         except Exception as e:
                             print(f"[PCM] Entry error: {e}")
-                            last_id = msg_id  # Still advance to avoid re-processing
+                            last_id = pcm_msg_id  # Still advance to avoid re-processing
 
             except asyncio.TimeoutError:
                 # Normal timeout, just continue
