@@ -77,8 +77,8 @@ class Persistence:
         idx_path = self._faiss_index_path(meeting_id)
         meta_path = self._faiss_meta_path(meeting_id)
         
-        logger.debug(f"Attempting to load FAISS index from: {idx_path}")
-        logger.debug(f"Attempting to load FAISS meta from: {meta_path}")
+        # logger.debug(f"Attempting to load FAISS index from: {idx_path}")
+        # logger.debug(f"Attempting to load FAISS meta from: {meta_path}")
 
         if idx_path.exists() and meta_path.exists():
             logger.info(f"Loading existing FAISS index for meeting_id: {meeting_id}")
@@ -95,33 +95,33 @@ class Persistence:
         idx_path = self._faiss_index_path(meeting_id)
         meta_path = self._faiss_meta_path(meeting_id)
         
-        logger.debug(f"Saving FAISS index to: {idx_path}")
+        # logger.debug(f"Saving FAISS index to: {idx_path}")
         faiss.write_index(index, str(idx_path))
-        logger.debug(f"FAISS index saved successfully (size: {index.ntotal} vectors)")
+        # logger.debug(f"FAISS index saved successfully (size: {index.ntotal} vectors)")
         
-        logger.debug(f"Saving FAISS metadata to: {meta_path}")
+        # logger.debug(f"Saving FAISS metadata to: {meta_path}")
         with open(meta_path, "wb") as f:
             pickle.dump(meta, f)
-        logger.debug(f"FAISS metadata saved successfully ({len(meta)} entries)")
+        # logger.debug(f"FAISS metadata saved successfully ({len(meta)} entries)")
 
     def save_segment(self, meeting_id: str, segment: dict):
         """
         segment: {speaker, start, end, text}
         """
-        logger.info(f"Saving segment for meeting_id: {meeting_id}")
-        logger.debug(f"Segment data: speaker={segment.get('speaker')}, "
-                    f"start={segment.get('start')}, end={segment.get('end')}, "
-                    f"text_length={len(segment.get('text', ''))}")
+       # logger.info(f"Saving segment for meeting_id: {meeting_id}")
+        # logger.debug(f"Segment data: speaker={segment.get('speaker')}, "
+        #             f"start={segment.get('start')}, end={segment.get('end')}, "
+        #             f"text_length={len(segment.get('text', ''))}")
         
         cur = self.conn.cursor()
 
-        logger.debug(f"Inserting meeting record for meeting_id: {meeting_id}")
+        #logger.debug(f"Inserting meeting record for meeting_id: {meeting_id}")
         cur.execute(
             "INSERT OR IGNORE INTO meetings(meeting_id) VALUES (?)",
             (meeting_id,)
         )
 
-        logger.debug("Inserting segment record into database...")
+       # logger.debug("Inserting segment record into database...")
         cur.execute(
             "INSERT INTO segments(meeting_id, speaker, start, end, text) VALUES (?, ?, ?, ?, ?)",
             (
@@ -134,10 +134,10 @@ class Persistence:
         )
         self.conn.commit()
         segment_id = cur.lastrowid
-        logger.info(f"Segment inserted successfully with segment_id: {segment_id}")
+       # logger.info(f"Segment inserted successfully with segment_id: {segment_id}")
 
         # 🔑 Embed DOCUMENT
-        logger.debug(f"Embedding segment text (mode: doc)...")
+        #logger.debug(f"Embedding segment text (mode: doc)...")
         vec = self.embedding.embed(segment.get("text", ""), mode="doc")
         vec = vec.reshape(1, -1)
         logger.debug(f"Vector shape: {vec.shape}, dtype: {vec.dtype}")
@@ -158,12 +158,12 @@ class Persistence:
             else:
                 logger.debug(f"Using existing FAISS index (current size: {index.ntotal})")
 
-            logger.debug(f"Adding vector to FAISS index...")
+           # logger.debug(f"Adding vector to FAISS index...")
             index.add(vec)
             meta.append(segment_id)
-            logger.debug(f"Vector added to index (new size: {index.ntotal})")
+            #logger.debug(f"Vector added to index (new size: {index.ntotal})")
 
-            logger.debug(f"Saving FAISS index and metadata...")
+           # logger.debug(f"Saving FAISS index and metadata...")
             self._save_faiss(meeting_id, index, meta)
             logger.info(f"FAISS index saved successfully for meeting_id: {meeting_id}")
 
