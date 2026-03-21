@@ -7,7 +7,7 @@ from services.audio_buffer import AudioBuffer
 from services.streaming_pipeline import StreamingPipeline
 from services.persistence import get_persistence
 from services.question_detector import get_question_detector
-
+from services.llm_responder import get_llm_responder
 logger = logging.getLogger(__name__)
 
 redis_client = redis.Redis(host="localhost", port=6379)
@@ -15,6 +15,7 @@ redis_client = redis.Redis(host="localhost", port=6379)
 # shared persistence instance
 persistence = get_persistence()
 question_detector = get_question_detector()
+llm_responder = get_llm_responder()
 
 class MeetingSession:
     def __init__(self, meeting_id):
@@ -24,7 +25,8 @@ class MeetingSession:
         self.running = False
         self.pcm_task = None
         self.question_detector_task = None  # Task for question detection loop
-
+        self.llm_responder_task = None
+        
     async def start(self):
         await launch_bot(self.meeting_id)
         self.running = True
@@ -38,7 +40,10 @@ class MeetingSession:
             question_detector.consume_and_detect(self.meeting_id)
         )
         logger.info(f"[SESSION] Question detector started for {self.meeting_id}")
-        
+        self.llm_responder_task = asyncio.create_task(
+        llm_responder.consume_and_respond(self.meeting_id)
+        )
+        logger.info(f"[SESSION] LLM responder started for {self.meeting_id}")
         print(f"[SESSION] {self.meeting_id} started")
 
     async def stop(self):
@@ -59,7 +64,12 @@ class MeetingSession:
                 await self.question_detector_task
             except asyncio.CancelledError:
                 logger.debug(f"[SESSION] Question detector task cancelled")
-        
+        if self.llm_responder_task:
+            self.llm_responder_task.cancel()
+            try:
+                await self.llm_responder_task
+            except asyncio.CancelledError:
+                logger.debug("[SESSION] LLM responder task cancelled")
         print(f"[SESSION] {self.meeting_id} stopped")
 
     async def _consume_pcm(self):
