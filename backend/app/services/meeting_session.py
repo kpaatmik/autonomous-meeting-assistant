@@ -133,8 +133,8 @@ class MeetingSession:
                                                 'end': str(r.get('end', 0))
                                             }
                                         )
-                                        logger.debug(f"Segment pushed to stream {stream} with id: {pcm_msg_id}")
-                                        print(f"[SEGMENT] Pushed to stream with id: {segment_msg_id}")
+                                        # logger.debug(f"Segment pushed to stream {stream} with id: {pcm_msg_id}")
+                                        # print(f"[SEGMENT] Pushed to stream with id: {segment_msg_id}")
                                     except Exception as e:
                                         logger.error(f"Error pushing segment to stream: {e}")
                                     
@@ -152,7 +152,7 @@ class MeetingSession:
 
                         except Exception as e:
                             print(f"[PCM] Entry error: {e}")
-                            last_id = msg_id  # Still advance to avoid re-processing
+                            last_id = pcm_msg_id  # Still advance to avoid re-processing
 
             except asyncio.TimeoutError:
                 # Normal timeout, just continue
