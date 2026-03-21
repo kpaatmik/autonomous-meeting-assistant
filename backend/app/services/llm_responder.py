@@ -72,6 +72,7 @@ class LLMResponder:
             context_section = f"Context:\n{context}\n" if context.strip() else ""
 
             prompt = f"""
+
 You are an AI meeting assistant.
 
 Use the provided meeting context to answer accurately.
@@ -153,7 +154,9 @@ Answer:
 
             # 3) Generate answer using LLM with context.
             response_data = await self.generate_response(question_text, context)
+
             print(f"[LLM] Question: {question_text} || Answer: {response_data['response']}")
+
 
             # 4) Write the answer to the meeting answer stream.
             await redis_client.xadd(
