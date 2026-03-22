@@ -17,7 +17,7 @@ class FlanQABot:
         self.persistence = get_persistence()
         logger.info("FLAN QA bot ready")
 
-    def answer_question(self, meeting_id: str, question: str, top_k: int = 5):
+    def answer_question(self, meeting_id: str, question: str, top_k: int = 8):
 
         # 🔵 Retrieve relevant segments using FAISS
         results = self.persistence.search(meeting_id, question, top_k)
@@ -28,31 +28,37 @@ class FlanQABot:
                 "sources": []
             }
 
-        # Extract text + ids
+        # ⭐ Re-rank results → prioritize segments containing keyword
+        results = sorted(
+            results,
+            key=lambda x: question.lower() in x[0][5].lower(),
+            reverse=True
+        )
+
+        # 🔵 Build context
         context_blocks = []
         source_ids = []
 
         for row, similarity in results:
             seg_id = row[0]
-            speaker = row[2]
             text = row[5]
 
-            context_blocks.append(f"{speaker}: {text}")
+            context_blocks.append(text.strip())
             source_ids.append(seg_id)
 
         context = "\n".join(context_blocks)
 
         # 🔴 Build RAG Prompt
         prompt = f"""
-Answer the question ONLY using the meeting context.
+You are an assistant answering questions based on meeting transcript.
 
-Context:
+Transcript:
 {context}
 
-Question:
-{question}
+Question: {question}
 
-If answer not found in context say "Not discussed".
+Answer to the corresponding question logically.
+If answer not present say: Not discussed.
 """
 
         output = self.pipe(prompt)[0]["generated_text"]
