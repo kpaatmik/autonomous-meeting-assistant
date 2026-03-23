@@ -98,10 +98,10 @@ Answer:
                     ],
                     options={
                         "temperature": 0.5,
-                        "num_predict": 150,
+                        "num_predict": 100,
                     },
                 ),
-                timeout=15,
+                timeout=90,
             )
 
             response_text = response.message.content
