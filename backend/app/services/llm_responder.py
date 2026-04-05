@@ -12,8 +12,8 @@ from services.persistence import get_persistence
 
 logger = logging.getLogger(__name__)
 
-MODEL_NAME = "mistral"
-MODEL_ID = "mistral-local"
+MODEL_NAME = "phi3"
+MODEL_ID = "phi3-local"
 
 _llm_responder_lock = threading.Lock()
 
