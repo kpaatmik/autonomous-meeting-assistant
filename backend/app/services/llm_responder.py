@@ -12,8 +12,8 @@ from services.persistence import get_persistence
 
 logger = logging.getLogger(__name__)
 
-MODEL_NAME = "llama3"
-MODEL_ID = "llama3-local"
+MODEL_NAME = "mistral"
+MODEL_ID = "mistral-local"
 
 _llm_responder_lock = threading.Lock()
 
