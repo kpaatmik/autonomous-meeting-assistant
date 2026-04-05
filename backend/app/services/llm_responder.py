@@ -1,5 +1,5 @@
 """
-LLM Responder Module - Production Version (Llama 3 via Ollama)
+LLM Responder Module - 
 """
 
 import asyncio
