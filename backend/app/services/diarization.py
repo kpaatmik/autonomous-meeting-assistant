@@ -8,7 +8,7 @@ load_dotenv()
 class DiarizationService:
     def __init__(self, meeting_id):
         self.pipeline = Pipeline.from_pretrained(
-            "pyannote/speaker-diarization@2.1",
+            "pyannote/speaker-diarization-3.1",
             use_auth_token=os.getenv("HUGGINGFACE_HUB_TOKEN")
             
         )
