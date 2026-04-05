@@ -31,13 +31,15 @@ def add_test_context():
     ]
 
     for i, (speaker, text) in enumerate(segments, start=1):
-        persistence.add_segment(
-            meeting_id=MEETING_ID,
-            speaker=speaker,
-            start=float(i),
-            end=float(i + 1),
-            text=text,
-        )
+        persistence.save_segment(
+                MEETING_ID,
+                {
+                    "speaker": speaker,
+                    "start": float(i),
+                    "end": float(i + 1),
+                    "text": text,
+                },
+            )
 
     print("[TEST] Context added\n")
 
