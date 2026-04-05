@@ -89,6 +89,7 @@ Answer:
             )
 
             response_text = response.message.content.strip()
+            print(f"[LLM RESPONSE]:- {response_text}")
 
             return {
                 "question": question,
@@ -143,6 +144,7 @@ Answer:
             response_data = await self.generate_response(question_text, context)
 
             logger.info("Response: %s", _truncate(response_data["response"]))
+            print(f"[RESPONSE] {response_data}")
 
             await redis_client.xadd(
                 answer_stream,
