@@ -47,32 +47,47 @@ def add_test_context():
 # -----------------------------
 # 2. PUSH QUESTION TO REDIS
 # -----------------------------
-async def push_question(r):
-    print("[TEST] Sending question...")
+async def push_questions_parallel(r):
+    questions = [
+        "What database are we using?",
+        "Where are we deploying?",
+        "What caching system is used?",
+        "What backend framework is used?",
+        "Is Docker mentioned?",
+        "Who is leading the project?",
+    ]
 
-    await r.xadd(
-        f"meeting:{MEETING_ID}:questions",
-        {
-            "text": "What database are we using?",
-            "speaker": "TEST_USER",
-            "segment_id": "test-1",
-        },
-    )
+    tasks = []
+    for i, q in enumerate(questions, start=1):
+        tasks.append(
+            r.xadd(
+                f"meeting:{MEETING_ID}:questions",
+                {
+                    "text": q,
+                    "speaker": "TEST_USER",
+                    "segment_id": f"test-{i}",
+                },
+            )
+        )
+
+    await asyncio.gather(*tasks)
+    print("[TEST] All questions sent in parallel\n")
 
 
 # -----------------------------
 # 3. READ ANSWER FROM REDIS
 # -----------------------------
-async def read_answer(r):
-    print("[TEST] Waiting for answer...\n")
+async def read_answers(r, expected=6):
+    print("[TEST] Waiting for answers...\n")
 
-    last_id = "$"
+    count = 0
+    last_id = "0"
 
-    while True:
+    while count < expected:
         messages = await r.xread(
             {f"meeting:{MEETING_ID}:answers": last_id},
             block=5000,
-            count=1,
+            count=10,
         )
 
         if messages:
@@ -81,9 +96,12 @@ async def read_answer(r):
                     print("\n===== ANSWER RECEIVED =====")
                     print("Question :", data[b"question"].decode())
                     print("Answer   :", data[b"response"].decode())
-                    print("Model    :", data[b"model"].decode())
-                    print("===========================\n")
-                    return
+                    print("===========================")
+
+                    count += 1
+                    last_id = msg_id
+
+    print("\n[TEST] All answers received\n")
 
 
 # -----------------------------
@@ -110,8 +128,8 @@ async def main():
     # Small delay to ensure responder is ready
     await asyncio.sleep(1)
 
-    # Step 4: Send question
-    await push_question(r)
+    # Step 4: Send questions
+    await push_questions_parallel(r)
 
     # Step 5: Read answer
     await read_answer(r)
