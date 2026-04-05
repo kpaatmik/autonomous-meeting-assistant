@@ -90,3 +90,5 @@ Thumbs.db
 # =========================
 reports/
 test-results/
+# FAISS files
+backend/app/db/faiss/

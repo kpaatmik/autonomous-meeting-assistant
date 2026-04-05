@@ -22,9 +22,9 @@ soundfile==0.12.1
 # -------------------------
 # PyTorch (CUDA 11.8 – SAFE)
 # -------------------------
-torch==2.1.0
-torchaudio==2.1.0
-torchvision==0.16.0
+torch
+torchaudio
+torchvision
 
 # -------------------------
 # Diarization
@@ -50,4 +50,4 @@ tqdm==4.66.4
 # -------------------------
 sentence-transformers==2.2.2
 transformers==4.35.2
-faiss-cpu==1.7.4
+faiss-cpu==1.9.0

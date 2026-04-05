@@ -1,174 +1,230 @@
 """
-LLM Responder Module - Stub for Future Implementation
-
-Will consume questions from Redis stream and generate responses using an LLM.
-Currently a placeholder for the full implementation.
+LLM Responder Module - 
 """
 
 import asyncio
 import logging
+import threading
 import redis.asyncio as redis
+import ollama
+
+from services.persistence import get_persistence
 
 logger = logging.getLogger(__name__)
+
+MODEL_NAME = "phi3"
+MODEL_ID = "phi3-local"
+
+_llm_responder_lock = threading.Lock()
+
+
+def _truncate(text: str, max_len: int = 80) -> str:
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 3].rstrip() + "..."
 
 
 class LLMResponder:
     def __init__(self):
-        logger.info("Initializing LLMResponder...")
+        logger.info("Initializing LLMResponder (Llama3)")
         self.redis_client = None
-        logger.info("LLMResponder ready (implementation pending)")
-    
+
     async def _get_redis_client(self):
-        """Get or create redis client (async)"""
         if self.redis_client is None:
             self.redis_client = redis.Redis(host="localhost", port=6379)
-            logger.debug("Redis client created")
         return self.redis_client
-    
+
+    async def close(self):
+        if self.redis_client:
+            try:
+                await self.redis_client.aclose()
+            except Exception as e:
+                logger.warning("Error closing Redis client: %s", e)
+            finally:
+                self.redis_client = None
+
     async def generate_response(self, question: str, context: str = "") -> dict:
-        """
-        Generate a response to a question using an LLM
-        
-        Args:
-            question: The question text
-            context: Optional context from meeting transcript
-        
-        Returns:
-            {
-                "question": str,
-                "response": str,
-                "model": str,
-                "error": Optional[str]
-            }
-        """
         try:
-            logger.debug(f"Generating response for: '{question[:60]}...'")
-            
-            # TODO: Implement LLM inference here
-            # Options:
-            # - OpenAI GPT-4 / GPT-3.5
-            # - Ollama local LLM
-            # - Hugging Face transformers
-            # - Azure OpenAI
-            
-            # Placeholder response
-            response = f"Response to: {question}"
-            
+            logger.debug("Generating response for: '%s'", _truncate(question))
+
+            context = context[:1500]
+
+            context_section = f"Context:\n{context}\n" if context.strip() else ""
+
+            prompt = f"""
+You are an AI meeting assistant.
+
+Rules:
+- Answer only using the provided context.
+- Do not make up information.
+- If the answer is not present, say: "I don't have enough information."
+
+{context_section}
+
+Question: {question}
+
+Answer:
+"""
+
+            response = await asyncio.wait_for(
+                asyncio.to_thread(
+                    ollama.chat,
+                    model=MODEL_NAME,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are a precise and factual assistant."
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        },
+                    ],
+                    options={
+                        "temperature": 0.3,
+                        "num_predict": 150,
+                    },
+                ),
+                timeout=90,
+            )
+
+            response_text = response.message.content.strip()
+            print(f"[LLM RESPONSE]:- {response_text}")
+
             return {
                 "question": question,
-                "response": response,
-                "model": "pending-implementation",
-                "error": None
+                "response": response_text,
+                "model": MODEL_ID,
+                "error": None,
             }
-        except Exception as e:
-            logger.error(f"Error generating response: {e}")
+
+        except asyncio.TimeoutError:
+            logger.error("LLM request timed out")
             return {
                 "question": question,
                 "response": "",
-                "model": "",
-                "error": str(e)
+                "model": MODEL_ID,
+                "error": "timeout",
             }
-    
+
+        except Exception as e:
+            logger.error("Error generating response: %s", e, exc_info=True)
+            return {
+                "question": question,
+                "response": "",
+                "model": MODEL_ID,
+                "error": str(e),
+            }
+
+    async def _handle_question(self, redis_client, answer_stream, msg_id, data, meeting_id):
+        try:
+            question_text = data[b"text"].decode("utf-8")
+            speaker = data.get(b"speaker", b"unknown").decode("utf-8")
+            segment_id = data.get(b"segment_id", b"").decode("utf-8")
+
+            logger.info("Question from %s: %s", speaker, _truncate(question_text))
+
+            persistence = get_persistence()
+
+            results = await asyncio.to_thread(
+                persistence.search, meeting_id, question_text, 3
+            )
+
+            context_parts = []
+            for row, sim in results:
+                ctx_speaker = row[2]
+                text = row[5]
+
+                context_parts.append(
+                    f"[Speaker: {ctx_speaker} | Score: {sim:.2f}] {text}"
+                )
+
+            context = "\n".join(context_parts)
+
+            response_data = await self.generate_response(question_text, context)
+
+            logger.info("Response: %s", _truncate(response_data["response"]))
+            print(f"[RESPONSE] {response_data}")
+
+            await redis_client.xadd(
+                answer_stream,
+                {
+                    "segment_id": segment_id,
+                    "question": question_text,
+                    "speaker": speaker,
+                    "response": response_data["response"],
+                    "model": response_data["model"],
+                },
+            )
+
+        except Exception as e:
+            logger.error("Error processing question: %s", e, exc_info=True)
+
     async def consume_and_respond(self, meeting_id: str):
-        """
-        Main loop: consume questions from Redis stream and generate responses
-        
-        Reads from: meeting:{meeting_id}:questions
-        Writes to: meeting:{meeting_id}:answers
-        """
         stream = f"meeting:{meeting_id}:questions"
         answer_stream = f"meeting:{meeting_id}:answers"
-        last_id = "$"  # Start from NOW
-        
+        last_id = "$"
+
         redis_client = await self._get_redis_client()
-        
-        logger.info(f"Starting LLM responder for meeting: {meeting_id}")
-        logger.info(f"Reading from stream: {stream}")
-        logger.info(f"Writing answers to stream: {answer_stream}")
-        
+
+        logger.info("Starting responder for meeting: %s", meeting_id)
+
         try:
             while True:
                 try:
-                    # Read questions from Redis stream
-                    logger.debug(f"Waiting for questions from {stream}...")
-                    msgs = await asyncio.wait_for(
-                        redis_client.xread(
-                            {stream: last_id},
-                            count=10,
-                            block=1000  # 1 second block
-                        ),
-                        timeout=2.0  # 2 second overall timeout
+                    msgs = await redis_client.xread(
+                        {stream: last_id},
+                        count=10,
+                        block=1000,
                     )
-                    
+
                     if not msgs:
-                        logger.debug(f"No new questions in {stream}")
                         continue
-                    
-                    for stream_key, entries in msgs:
+
+                    for _, entries in msgs:
+                        tasks = []
+                        last_id_in_batch = last_id
+
                         for msg_id, data in entries:
-                            try:
-                                # Decode question data
-                                question_text = data[b'text'].decode('utf-8')
-                                speaker = data[b'speaker'].decode('utf-8') if b'speaker' in data else "unknown"
-                                segment_id = data[b'segment_id'].decode('utf-8') if b'segment_id' in data else ""
-                                
-                                logger.info(f"Processing question from '{speaker}': '{question_text[:60]}...'")
-                                
-                                # Generate response
-                                response_data = await self.generate_response(question_text)
-                                
-                                # Add metadata
-                                response_data['speaker'] = speaker
-                                response_data['segment_id'] = segment_id
-                                response_data['meeting_id'] = meeting_id
-                                
-                                # Push to answers stream
-                                try:
-                                    answer_msg_id = await redis_client.xadd(
-                                        answer_stream,
-                                        {
-                                            'segment_id': segment_id,
-                                            'question': question_text,
-                                            'speaker': speaker,
-                                            'response': response_data['response'],
-                                            'model': response_data['model']
-                                        }
-                                    )
-                                    logger.debug(f"Answer pushed to {answer_stream} with id: {answer_msg_id}")
-                                except Exception as e:
-                                    logger.error(f"Failed to push answer to stream: {e}")
-                                
-                                # Update stream position
-                                last_id = msg_id
-                                
-                            except Exception as e:
-                                logger.error(f"Error processing question entry: {e}", exc_info=True)
-                                last_id = msg_id  # Still advance to avoid re-processing
-                
-                except asyncio.TimeoutError:
-                    logger.debug("LLM responder read timeout (normal)")
-                    continue
-                    
+                            tasks.append(
+                                self._handle_question(
+                                    redis_client,
+                                    answer_stream,
+                                    msg_id,
+                                    data,
+                                    meeting_id,
+                                )
+                            )
+                            last_id_in_batch = msg_id
+
+                        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                        for res in results:
+                            if isinstance(res, Exception):
+                                logger.error("Task error", exc_info=res)
+
+                        last_id = last_id_in_batch
+
                 except asyncio.CancelledError:
-                    logger.info(f"LLM responder cancelled for meeting: {meeting_id}")
+                    logger.info("Responder cancelled")
                     break
-                    
+
                 except Exception as e:
-                    logger.error(f"Error in LLM responder loop: {e}", exc_info=True)
+                    logger.error("Main loop error: %s", e, exc_info=True)
                     await asyncio.sleep(1)
-        
+
         finally:
-            logger.info(f"LLM responder stopped for meeting: {meeting_id}")
+            logger.info("Responder stopped for meeting: %s", meeting_id)
 
 
-# Singleton instance
-_llm_responder: LLMResponder = None
+_llm_responder = None
 
 
 def get_llm_responder() -> LLMResponder:
-    """Get or initialize the global LLM responder instance"""
     global _llm_responder
     if _llm_responder is None:
-        logger.info("Creating new LLMResponder instance")
-        _llm_responder = LLMResponder()
+        with _llm_responder_lock:
+            if _llm_responder is None:
+                logger.info("Creating LLMResponder instance")
+                _llm_responder = LLMResponder()
     return _llm_responder
