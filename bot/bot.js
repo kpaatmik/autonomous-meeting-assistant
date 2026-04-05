@@ -16,9 +16,13 @@ async function sendMessage(page, message) {
       await page.waitForTimeout(500);
     }
 
-    const chatInput = await page.waitForSelector("textarea", { timeout: 5000 });
+    const chatInput = await page.waitForSelector(
+  'textarea, div[contenteditable="true"]',
+  { timeout: 5000 }
+    );
 
-    await chatInput.type(message);
+    await chatInput.focus();
+    await page.keyboard.type(message);
     await page.keyboard.press("Enter");
 
     console.log("[BOT] Message sent:", message);
@@ -45,7 +49,7 @@ async function listenForAnswers(page, meetingId) {
     try {
       const response = await redis.xRead(
         [{ key: `meeting:${meetingId}:answers`, id: lastId }],
-        { BLOCK: 0 }
+        { BLOCK: 1000 }
       );
 
       if (response) {
@@ -139,7 +143,9 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
   // ============================================
   // ✅ START LISTENING AFTER JOIN (ADDED)
   // ============================================
+  setTimeout(() => {
   listenForAnswers(page, meeting_id);
+    }, 0);
 
 
   console.log(`[${meeting_id}] Connecting audio socket...`);
