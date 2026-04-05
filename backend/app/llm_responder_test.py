@@ -132,7 +132,7 @@ async def main():
     await push_questions_parallel(r)
 
     # Step 5: Read answer
-    await read_answer(r)
+    await read_answers(r)
 
     # Cleanup
     responder_task.cancel()
