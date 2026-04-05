@@ -85,7 +85,7 @@ Answer:
                         "num_predict": 150,
                     },
                 ),
-                timeout=60,
+                timeout=90,
             )
 
             response_text = response.message.content.strip()
