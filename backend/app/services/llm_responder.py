@@ -9,6 +9,7 @@ import redis.asyncio as redis
 import ollama
 
 from services.persistence import get_persistence
+from storage.meetings import MEETINGS
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +140,14 @@ Answer:
                     f"[Speaker: {ctx_speaker} | Score: {sim:.2f}] {text}"
                 )
 
-            context = "\n".join(context_parts)
+            transcript_context = "\n".join(context_parts)
+            meeting = MEETINGS.get(meeting_id, {})
+            pre_intents = meeting.get("pre_intents", [])
+            pre_intent_context = ""
+            if pre_intents:
+                pre_intent_context = "Pre-meeting context:\n" + "\n".join(f"- {item}" for item in pre_intents) + "\n\n"
+
+            context = f"{pre_intent_context}{transcript_context}".strip()
 
             response_data = await self.generate_response(question_text, context)
 
