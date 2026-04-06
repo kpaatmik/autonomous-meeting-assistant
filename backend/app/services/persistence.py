@@ -149,10 +149,7 @@ class Persistence:
             meta.append(segment_id)
             #logger.debug(f"Vector added to index (new size: {index.ntotal})")
 
-           # logger.debug(f"Saving FAISS index and metadata...")
-            index.add(vec)
-            meta.append(segment_id)
-            ###############
+           
             
             self._save_faiss(meeting_id, index, meta)
 
