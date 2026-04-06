@@ -16,14 +16,35 @@ router = APIRouter(prefix="/meetings", tags=["Meetings"])
 IST = pytz.timezone("Asia/Kolkata")
 
 
+@router.get("/")
+async def list_meetings():
+    return {"meetings": list(MEETINGS.values())}
+
+
+@router.get("/{meeting_id}")
+async def get_meeting(meeting_id: str):
+    meeting = MEETINGS.get(meeting_id)
+    if not meeting:
+        return {"error": "Meeting not found"}
+    return meeting
+
+
 @router.post("/schedule")
 async def schedule_meeting(payload: dict):
     meeting_id = payload["meeting_id"]
 
-    MEETINGS[meeting_id] = payload
+    meeting_payload = {
+        "meeting_id": meeting_id,
+        "meeting_url": payload.get("meeting_url"),
+        "bot_name": payload.get("bot_name", "AI Bot"),
+        "start_time": payload.get("start_time"),
+        "pre_intents": payload.get("pre_intents", []),
+    }
+
+    MEETINGS[meeting_id] = meeting_payload
 
     # 🔑 FIX: parse + localize time
-    start_time = datetime.fromisoformat(payload["start_time"])
+    start_time = datetime.fromisoformat(meeting_payload["start_time"])
     start_time = IST.localize(start_time)
 
     scheduler = get_scheduler()
@@ -40,7 +61,19 @@ async def schedule_meeting(payload: dict):
 
     return {"status": "scheduled", "meeting_id": meeting_id}
 
-from services.persistence import get_persistence
+
+@router.put("/{meeting_id}/preintents")
+async def update_preintents(meeting_id: str, payload: dict):
+    meeting = MEETINGS.get(meeting_id)
+    if not meeting:
+        return {"error": "Meeting not found"}
+
+    pre_intents = payload.get("pre_intents", [])
+    if not isinstance(pre_intents, list):
+        return {"error": "pre_intents must be a list"}
+
+    meeting["pre_intents"] = [str(item).strip() for item in pre_intents if str(item).strip()]
+    return {"status": "updated", "meeting_id": meeting_id, "pre_intents": meeting["pre_intents"]}
 
 @router.get("/{meeting_id}/search")
 async def search_meeting(meeting_id: str, q: str, top_k: int = 5):

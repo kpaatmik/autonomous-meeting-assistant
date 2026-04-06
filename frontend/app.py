@@ -20,19 +20,60 @@ with tab1:
     meeting_url = st.text_input("Meeting URL")
     bot_name = st.text_input("Bot Name", "AI Assistant")
     start_time = st.datetime_input("Start Time")
+    pre_intents_input = st.text_area(
+        "Pre-Meeting Topics",
+        help="Enter one agenda item or context line per row. These will be used to guide the assistant during the meeting."
+    )
 
     if st.button("Schedule"):
-
+        pre_intents = [line.strip() for line in pre_intents_input.splitlines() if line.strip()]
         payload = {
             "meeting_id": meeting_id,
             "meeting_url": meeting_url,
             "bot_name": bot_name,
-            "start_time": start_time.isoformat()
+            "start_time": start_time.isoformat(),
+            "pre_intents": pre_intents
         }
 
         res = requests.post(f"{API}/meetings/schedule", json=payload)
 
-        st.success("Meeting Scheduled successfully")
+        if res.status_code == 200:
+            st.success("Meeting scheduled successfully")
+        else:
+            st.error(f"Failed to schedule meeting: {res.text}")
+
+    st.markdown("---")
+    st.subheader("Upcoming Meetings")
+
+    meetings_res = requests.get(f"{API}/meetings")
+    meetings = meetings_res.json().get("meetings", []) if meetings_res.ok else []
+
+    if not meetings:
+        st.info("No upcoming meetings found.")
+    else:
+        for meeting in meetings:
+            with st.expander(f"{meeting['meeting_id']} — {meeting.get('start_time', 'No time')}", expanded=False):
+                st.write(f"**Meeting URL:** {meeting.get('meeting_url', 'N/A')}")
+                st.write(f"**Bot Name:** {meeting.get('bot_name', 'AI Assistant')}")
+                st.write(f"**Start Time:** {meeting.get('start_time', 'N/A')}")
+
+                existing_pre_intents = meeting.get("pre_intents", [])
+                pre_intents_text = st.text_area(
+                    "Pre-Meeting Topics",
+                    value="\n".join(existing_pre_intents),
+                    key=f"preintents_{meeting['meeting_id']}"
+                )
+
+                if st.button("Save Pre-Intents", key=f"save_preintents_{meeting['meeting_id']}"):
+                    updated_pre_intents = [line.strip() for line in pre_intents_text.splitlines() if line.strip()]
+                    update_res = requests.put(
+                        f"{API}/meetings/{meeting['meeting_id']}/preintents",
+                        json={"pre_intents": updated_pre_intents}
+                    )
+                    if update_res.ok:
+                        st.success("Pre-intents updated")
+                    else:
+                        st.error(f"Failed to update pre-intents: {update_res.text}")
 
 
 # ======================

@@ -1,6 +1,7 @@
 import logging
 from transformers import pipeline
 from services.persistence import get_persistence
+from storage.meetings import MEETINGS
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,10 @@ class FlanQABot:
         # 🔵 Retrieve relevant segments using FAISS
         results = self.persistence.search(meeting_id, question, top_k)
 
-        if not results:
+        meeting = MEETINGS.get(meeting_id, {})
+        pre_intents = meeting.get("pre_intents", [])
+
+        if not results and not pre_intents:
             return {
                 "answer": "No relevant discussion found in the meeting.",
                 "sources": []
@@ -46,19 +50,21 @@ class FlanQABot:
             context_blocks.append(text.strip())
             source_ids.append(seg_id)
 
-        context = "\n".join(context_blocks)
+        transcript_context = "\n".join(context_blocks)
+        pre_intent_section = ""
+        if pre_intents:
+            pre_intent_section = "Pre-Meeting Context:\n" + "\n".join(f"- {intent}" for intent in pre_intents) + "\n\n"
 
-        # 🔴 Build RAG Prompt
         prompt = f"""
-You are an assistant answering questions based on meeting transcript.
+You are an assistant answering questions based on the meeting transcript and the pre-meeting agenda.
 
+{pre_intent_section}
 Transcript:
-{context}
+{transcript_context}
 
 Question: {question}
 
-Answer to the corresponding question logically.
-If answer not present say: Not discussed.
+Answer the question using the available meeting context. If the answer is not present, say: Not discussed.
 """
 
         output = self.pipe(prompt)[0]["generated_text"]
