@@ -45,7 +45,7 @@ with tab1:
     st.markdown("---")
     st.subheader("Upcoming Meetings")
 
-    meetings_res = requests.get(f"{API}/meetings")
+    meetings_res = requests.get(f"{API}/meetings", params={"status": "scheduled"})
     meetings = meetings_res.json().get("meetings", []) if meetings_res.ok else []
 
     if not meetings:
