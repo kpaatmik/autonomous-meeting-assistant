@@ -51,18 +51,4 @@ app.add_middleware(
 )
 app.include_router(meetings_router)
 app.include_router(audio_ws_router)
-"""app.mount(
-    "/static",
-    StaticFiles(directory=Path(__file__).parent.parent / "static"),
-    name="static"
-)
-"""
-from pathlib import Path
-
-STATIC_DIR = Path(__file__).parent / "static"
-
-app.mount(
-    "/static",
-    StaticFiles(directory=STATIC_DIR),
-    name="static",
-)
+app.mount("/static", StaticFiles(directory="static"), name="static")
