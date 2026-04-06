@@ -8,27 +8,39 @@ const delay = ms => new Promise(res => setTimeout(res, ms));
 // ============================================
 // ✅ ADDED: CHAT SEND FUNCTION
 // ============================================
-async function sendMessage(page, message) {
+async function sendMessage(page, message, meetingId) {
   try {
-    const chatButton = await page.$('button[aria-label="Open chat"]');
+    // Try to find and click chat button
+    const chatButton = await page.$('button[aria-label="Open chat"]') ||
+                       await page.$('button[aria-label="Chat"]') ||
+                       await page.$('[data-testid="chat-button"]');
+    
     if (chatButton) {
       await chatButton.click();
-      await page.waitForTimeout(500);
+      await delay(800);
     }
 
-    const chatInput = await page.waitForSelector(
-  'textarea, div[contenteditable="true"]',
-  { timeout: 5000 }
-    );
+    // More robust selector for Jitsi chat input
+    const chatInput = await page.$('textarea[id="usermsg"]') ||
+                      await page.$('input[id="usermsg"]') ||
+                      await page.$('textarea') ||
+                      await page.$('div[contenteditable="true"][role="textbox"]');
 
-    await chatInput.focus();
+    if (!chatInput) {
+      console.warn(`[${meetingId}] Chat input not found on page`);
+      return;
+    }
+
+    await chatInput.click();
+    await delay(300);
     await page.keyboard.type(message);
+    await delay(200);
     await page.keyboard.press("Enter");
 
-    console.log("[BOT] Message sent:", message);
+    console.log(`[${meetingId}] Message sent: ${message.substring(0, 50)}...`);
 
   } catch (err) {
-    console.error("[BOT] Chat send error:", err.message);
+    console.error(`[${meetingId}] Chat send error: ${err.message}`);
   }
 }
 
@@ -37,39 +49,72 @@ async function sendMessage(page, message) {
 // ✅ ADDED: REDIS LISTENER
 // ============================================
 async function listenForAnswers(page, meetingId) {
-  const redis = createClient();
+  let redis = null;
+  let lastId = "$";
+  let errorCount = 0;
+  const MAX_ERRORS = 5;
 
-  await redis.connect();
+  const connect = async () => {
+    try {
+      redis = createClient();
+      await redis.connect();
+      console.log(`[${meetingId}] Redis connected, listening for answers...`);
+      errorCount = 0;
+    } catch (err) {
+      console.error(`[${meetingId}] Redis connect failed: ${err.message}`);
+      setTimeout(connect, 3000);
+    }
+  };
 
-  let lastId = "0";
-
-  console.log(`[${meetingId}] Listening for LLM answers...`);
+  await connect();
 
   while (true) {
     try {
+      if (!redis) {
+        await delay(1000);
+        await connect();
+        continue;
+      }
+
       const response = await redis.xRead(
         [{ key: `meeting:${meetingId}:answers`, id: lastId }],
-        { BLOCK: 1000 }
+        { BLOCK: 2000 }
       );
 
-      if (response) {
+      if (response && response.length > 0) {
         for (const stream of response) {
-          for (const message of stream.messages) {
-            const data = message.message;
-
+          for (const msg of stream.messages) {
+            const data = msg.message;
             const answer = data.response;
 
-            if (answer && answer.length > 0) {
-              await sendMessage(page, `AI: ${answer}`);
+            if (answer && answer.trim().length > 0) {
+              console.log(`[${meetingId}] New answer received, sending to chat...`);
+              await sendMessage(page, `AI Assistant: ${answer}`, meetingId);
+              await delay(500);
             }
 
-            lastId = message.id;
+            lastId = msg.id;
           }
         }
       }
+      errorCount = 0;
+
     } catch (err) {
-      console.error(`[${meetingId}] Redis read error: ${err.message}`);
-      await delay(1000);
+      errorCount++;
+      if (errorCount > MAX_ERRORS) {
+        console.error(`[${meetingId}] Too many Redis errors, reconnecting...`);
+        try {
+          await redis?.quit();
+        } catch (e) {}
+        redis = null;
+        lastId = "$";
+        errorCount = 0;
+        await delay(2000);
+        await connect();
+      } else {
+        console.warn(`[${meetingId}] Redis read error (${errorCount}/${MAX_ERRORS}): ${err.message}`);
+        await delay(1000);
+      }
     }
   }
 }
@@ -139,13 +184,13 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
   console.log(`[${meeting_id}] Bot joined`);
   await delay(5000);
 
-
   // ============================================
   // ✅ START LISTENING AFTER JOIN (ADDED)
   // ============================================
-  setTimeout(() => {
-  listenForAnswers(page, meeting_id);
-    }, 0);
+  // Start Redis listener in background without blocking
+  listenForAnswers(page, meeting_id).catch(err => {
+    console.error(`[${meeting_id}] Listener error: ${err.message}`);
+  });
 
 
   console.log(`[${meeting_id}] Connecting audio socket...`);
@@ -183,7 +228,83 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
 
   socket.on("open", async () => {
     console.log(`[${meeting_id}] 🔊 Audio socket connected`);
-    // (unchanged rest)
+
+    try {
+      await delay(3000);
+
+      const setupSuccess = await page.evaluate(async () => {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioCtx({ sampleRate: 16000 });
+
+        if (audioCtx.state === "suspended") {
+          await audioCtx.resume();
+        }
+
+        try {
+          await audioCtx.audioWorklet.addModule(
+            "http://localhost:8000/static/audioWorklet.js"
+          );
+        } catch (err) {
+          console.error("[AudioWorklet] Load failed:", err.message);
+          return false;
+        }
+
+        const worklet = new AudioWorkletNode(audioCtx, "pcm-processor");
+        worklet.connect(audioCtx.destination);
+
+        worklet.port.onmessage = e => {
+          const arrayData = Array.from(e.data);
+          window.sendPCM(arrayData);
+        };
+
+        const attached = new WeakSet();
+
+        function attachAudioElement(el) {
+          if (attached.has(el)) return false;
+          try {
+            const stream = el.captureStream ? el.captureStream() : el.mozCaptureStream();
+            const source = audioCtx.createMediaStreamSource(stream);
+            source.connect(worklet);
+            attached.add(el);
+            return true;
+          } catch (err) {
+            return false;
+          }
+        }
+
+        let count = 0;
+        document.querySelectorAll("audio, video").forEach(el => {
+          if (attachAudioElement(el)) count++;
+        });
+
+        const observer = new MutationObserver(() => {
+          document.querySelectorAll("audio, video").forEach(el => {
+            attachAudioElement(el);
+          });
+        });
+
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true
+        });
+
+        setInterval(() => {
+          document.querySelectorAll("audio, video").forEach(el => {
+            attachAudioElement(el);
+          });
+        }, 3000);
+
+        return count > 0;
+      });
+
+      if (setupSuccess) {
+        console.log(`[${meeting_id}] 🎙 PCM streaming active`);
+      } else {
+        console.warn(`[${meeting_id}] No audio elements found yet, will retry`);
+      }
+    } catch (err) {
+      console.error(`[${meeting_id}] Audio setup error: ${err.message}`);
+    }
   });
 
   socket.on("error", err => {
