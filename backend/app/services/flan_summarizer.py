@@ -1,18 +1,21 @@
 import math
 import logging
-from transformers import pipeline
+import os
+import requests
 
 logger = logging.getLogger(__name__)
 
 class FlanSummarizer:
 
     def __init__(self):
-        logger.info("Loading DistilBART summarizer...")
-        self.pipe = pipeline(
-            "summarization",
-            model="sshleifer/distilbart-cnn-12-6"
-        )
-        logger.info("DistilBART summarizer ready")
+        logger.info("Loading BART-large-cnn summarizer via HF Inference...")
+        self.hf_token = os.getenv("HUGGINGFACE_API_KEY")
+        if not self.hf_token:
+            raise ValueError("HUGGINGFACE_API_KEY environment variable not set")
+        self.model_id = "facebook/bart-large-cnn"
+        self.api_url = f"https://api-inference.huggingface.co/models/{self.model_id}"
+        self.headers = {"Authorization": f"Bearer {self.hf_token}"}
+        logger.info("BART-large-cnn summarizer ready")
 
     def _chunk_text(self, texts, chunk_size=1200):
         """
@@ -30,7 +33,13 @@ class FlanSummarizer:
         return chunks
 
     def _summarize_chunk(self, chunk):
-        out = self.pipe(chunk, max_length=150, min_length=30, do_sample=False)[0]["summary_text"]
+        payload = {"inputs": chunk}
+        response = requests.post(self.api_url, headers=self.headers, json=payload)
+        if response.status_code == 200:
+            out = response.json()[0]["summary_text"]
+        else:
+            logger.error(f"HF API error: {response.text}")
+            out = chunk[:200]  # fallback
         return out
 
     def summarize_meeting(self, segments):
@@ -53,7 +62,13 @@ class FlanSummarizer:
 
         # 🔴 REDUCE STEP
         combined_summaries = " ".join(mini_summaries)
-        final = self.pipe(combined_summaries, max_length=300, min_length=100, do_sample=False)[0]["summary_text"]
+        payload = {"inputs": combined_summaries}
+        response = requests.post(self.api_url, headers=self.headers, json=payload)
+        if response.status_code == 200:
+            final = response.json()[0]["summary_text"]
+        else:
+            logger.error(f"HF API error: {response.text}")
+            final = combined_summaries[:500]  # fallback
 
         return {
             "summary": final,

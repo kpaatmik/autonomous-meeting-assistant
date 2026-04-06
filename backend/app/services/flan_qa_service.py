@@ -1,5 +1,6 @@
 import logging
-from transformers import pipeline
+import os
+from groq import Groq
 from services.persistence import get_persistence
 from storage.meetings import MEETINGS
 
@@ -9,13 +10,13 @@ logger = logging.getLogger(__name__)
 class FlanQABot:
 
     def __init__(self):
-        logger.info("Loading DistilBERT QA model...")
-        self.pipe = pipeline(
-            "question-answering",
-            model="distilbert-base-uncased-distilled-squad"
-        )
+        logger.info("Loading Groq Llama 8B QA model...")
+        self.groq_api_key = os.getenv("GROQ_API_KEY")
+        if not self.groq_api_key:
+            raise ValueError("GROQ_API_KEY environment variable not set")
+        self.client = Groq(api_key=self.groq_api_key)
         self.persistence = get_persistence()
-        logger.info("DistilBERT QA bot ready")
+        logger.info("Groq Llama 8B QA bot ready")
 
     def answer_question(self, meeting_id: str, question: str, top_k: int = 8):
 
@@ -56,14 +57,28 @@ class FlanQABot:
 
         full_context = pre_intent_section + transcript_context
 
-        result = self.pipe(question=question, context=full_context)
+        prompt = f"""You are an AI assistant answering questions about a meeting based on the transcript and pre-meeting agenda.
 
-        output = result['answer']
+{full_context}
+
+Question: {question}
+
+Answer the question using only the information from the meeting context above. If the information is not available in the context, say "This was not discussed in the meeting." Keep the answer concise and relevant."""
+
+        message = self.client.messages.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=512,
+            temperature=0.3
+        )
+
+        output = message.content[0].text
 
         return {
             "answer": output,
-            "sources": source_ids,
-            "score": result.get('score', 0)
+            "sources": source_ids
         }
 
 
