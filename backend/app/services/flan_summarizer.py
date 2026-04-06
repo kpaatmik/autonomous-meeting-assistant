@@ -1,26 +1,48 @@
 import math
 import logging
-from transformers import pipeline
+import os
+import re
+from groq import Groq
 
 logger = logging.getLogger(__name__)
 
 class FlanSummarizer:
 
     def __init__(self):
-        logger.info("Loading FLAN-T5 summarizer...")
-        self.pipe = pipeline(
-            "text2text-generation",
-            model="google/flan-t5-base",
-            max_length=512
-        )
-        logger.info("FLAN summarizer ready")
+        logger.info("Loading Groq Llama 3.1 for summarization...")
+        self.groq_api_key = os.getenv("GROQ_API_KEY")
+        if not self.groq_api_key:
+            raise ValueError("GROQ_API_KEY environment variable not set")
+        self.client = Groq(api_key=self.groq_api_key)
+        logger.info("Groq Llama 3.1 summarizer ready")
 
-    def _chunk_text(self, texts, chunk_size=1200):
-        """
-        Hierarchical chunking.
-        texts = list of segment texts
-        """
-        joined = " ".join(texts)
+    def _preprocess_text(self, text):
+        """Clean up transcript text for better summarization"""
+        # Remove common filler words and phrases
+        fillers = [
+            r'\b(um|uh|like|you know|so|well|actually|basically|i mean|sort of|kind of)\b',
+            r'\b(bye bye|thanks for watching|see you|next video)\b',
+            r'\b(if you see this|pin as|i don\'t know)\b',
+            r'\.\s*\.\s*\.',  # Multiple dots
+            r'\s+',  # Multiple spaces
+        ]
+
+        for pattern in fillers:
+            text = re.sub(pattern, ' ', text, flags=re.IGNORECASE)
+
+        # Fix common typos and clean up
+        text = re.sub(r'(\w)\1{2,}', r'\1', text)  # Remove repeated characters
+        text = re.sub(r'[^\w\s.,!?-]', '', text)  # Remove special chars except basic punctuation
+
+        # Clean up spacing
+        text = re.sub(r'\s+', ' ', text).strip()
+
+        return text
+
+    def _chunk_text(self, texts, chunk_size=3000):
+        """Chunk text for API limits"""
+        processed_texts = [self._preprocess_text(text) for text in texts if text.strip()]
+        joined = " ".join(processed_texts)
         words = joined.split()
 
         chunks = []
@@ -30,16 +52,36 @@ class FlanSummarizer:
 
         return chunks
 
-    def _summarize_chunk(self, chunk):
-        prompt = f"""
-Summarize this meeting discussion clearly:
+    def _summarize_with_llama(self, text):
+        """Use Groq Mixtral for high-quality summarization"""
+        prompt = f"""Please provide a comprehensive and well-structured summary of the following meeting transcript. Focus on:
 
-{chunk}
+1. Main topics discussed
+2. Key decisions made
+3. Important action items or next steps
+4. Any conclusions or outcomes
 
-Return short bullet summary.
-"""
-        out = self.pipe(prompt)[0]["generated_text"]
-        return out
+Be detailed but concise, and ensure the summary captures all important information from the transcript.
+
+Transcript:
+{text}
+
+Summary:"""
+
+        try:
+            message = self.client.chat.completions.create(
+                model="mixtral-8x7b-32768",  # Currently supported model
+                messages=[
+                    {"role": "system", "content": "You are an expert at summarizing meeting transcripts. Provide clear, concise, and well-structured summaries that capture all important points while being comprehensive."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=1500,  # Allow longer summaries
+                temperature=0.3
+            )
+            return message.choices[0].message.content
+        except Exception as e:
+            logger.error(f"Groq summarization failed: {e}")
+            return text[:500]  # fallback
 
     def summarize_meeting(self, segments):
         """
@@ -51,32 +93,26 @@ Return short bullet summary.
         if not texts:
             return {"summary": "No transcript available"}
 
-        # 🔵 MAP STEP
+        # Process all text together for comprehensive summarization
         chunks = self._chunk_text(texts)
 
-        mini_summaries = []
-        for ch in chunks:
-            mini = self._summarize_chunk(ch)
-            mini_summaries.append(mini)
+        if len(chunks) == 1:
+            # Single chunk - summarize directly
+            final = self._summarize_with_llama(chunks[0])
+        else:
+            # Multiple chunks - summarize each then combine and re-summarize
+            chunk_summaries = []
+            for chunk in chunks:
+                summary = self._summarize_with_llama(chunk)
+                chunk_summaries.append(summary)
 
-        # 🔴 REDUCE STEP
-        final_prompt = f"""
-Combine these summaries into one final meeting summary.
-
-Also extract:
-- Key Decisions
-- Action Items
-- Open Questions
-
-Summaries:
-{mini_summaries}
-"""
-
-        final = self.pipe(final_prompt)[0]["generated_text"]
+            # Combine chunk summaries and create final summary
+            combined_text = "\n\n".join(chunk_summaries)
+            final = self._summarize_with_llama(combined_text)
 
         return {
             "summary": final,
-            "num_chunks": len(chunks)
+            "method": "groq-mixtral-8x7b"
         }
 
 
