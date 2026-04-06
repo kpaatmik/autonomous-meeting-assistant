@@ -10,32 +10,107 @@ const delay = ms => new Promise(res => setTimeout(res, ms));
 // ============================================
 async function sendMessage(page, message, meetingId) {
   try {
+    // Debug: Log all possible input elements
+    const debugElements = await page.evaluate(() => {
+      const elements = [];
+      document.querySelectorAll('textarea, input[type="text"], div[contenteditable="true"]').forEach(el => {
+        elements.push({
+          tag: el.tagName.toLowerCase(),
+          id: el.id,
+          class: el.className,
+          placeholder: el.placeholder || el.getAttribute('placeholder'),
+          contenteditable: el.getAttribute('contenteditable'),
+          role: el.getAttribute('role'),
+          visible: el.offsetWidth > 0 && el.offsetHeight > 0
+        });
+      });
+      return elements;
+    });
+    console.log(`[${meetingId}] Available input elements:`, debugElements);
+
     // Try to find and click chat button
     const chatButton = await page.$('button[aria-label="Open chat"]') ||
                        await page.$('button[aria-label="Chat"]') ||
-                       await page.$('[data-testid="chat-button"]');
-    
+                       await page.$('[data-testid="chat-button"]') ||
+                       await page.$('button[class*="chat"]') ||
+                       await page.$('div[aria-label*="chat" i]');
+
     if (chatButton) {
+      console.log(`[${meetingId}] Found chat button, clicking...`);
       await chatButton.click();
-      await delay(800);
+      await delay(1000); // Wait longer for chat to open
+    } else {
+      console.log(`[${meetingId}] Chat button not found`);
     }
 
-    // More robust selector for Jitsi chat input
-    const chatInput = await page.$('textarea[id="usermsg"]') ||
-                      await page.$('input[id="usermsg"]') ||
-                      await page.$('textarea') ||
-                      await page.$('div[contenteditable="true"][role="textbox"]');
+    // More robust selector for Jitsi chat input - try multiple approaches
+    let chatInput = null;
+
+    // Try specific Jitsi selectors first
+    chatInput = await page.$('textarea[id="usermsg"]') ||
+                await page.$('input[id="usermsg"]') ||
+                await page.$('textarea[placeholder*="message" i]') ||
+                await page.$('input[placeholder*="message" i]') ||
+                await page.$('textarea') ||
+                await page.$('input[type="text"]') ||
+                await page.$('div[contenteditable="true"][role="textbox"]') ||
+                await page.$('div[contenteditable="true"]');
+
+    if (!chatInput) {
+      console.warn(`[${meetingId}] Chat input not found with standard selectors, trying broader search...`);
+
+      // Try to find any visible input-like element in chat area
+      chatInput = await page.evaluateHandle(() => {
+        // Look for elements that might be chat inputs
+        const candidates = [
+          ...document.querySelectorAll('textarea'),
+          ...document.querySelectorAll('input[type="text"]'),
+          ...document.querySelectorAll('div[contenteditable="true"]')
+        ].filter(el => {
+          const rect = el.getBoundingClientRect();
+          return rect.width > 50 && rect.height > 20 && rect.top > 0;
+        });
+
+        // Prefer elements that are currently visible and in a chat-like context
+        for (const el of candidates) {
+          if (el.closest('[class*="chat"]') || el.closest('[id*="chat"]') ||
+              el.getAttribute('placeholder')?.toLowerCase().includes('message') ||
+              el.getAttribute('aria-label')?.toLowerCase().includes('message')) {
+            return el;
+          }
+        }
+
+        // Fallback to first visible candidate
+        return candidates[0] || null;
+      });
+    }
 
     if (!chatInput) {
       console.warn(`[${meetingId}] Chat input not found on page`);
       return;
     }
 
+    console.log(`[${meetingId}] Found chat input, sending message...`);
+
+    // Focus and type
     await chatInput.click();
     await delay(300);
     await page.keyboard.type(message);
     await delay(200);
-    await page.keyboard.press("Enter");
+
+    // Try to send - look for send button or press enter
+    const sendButton = await page.$('button[aria-label="Send message"]') ||
+                       await page.$('button[type="submit"]') ||
+                       await page.$('button[class*="send"]') ||
+                       await page.$('[data-testid="chat-send-button"]');
+
+    if (sendButton) {
+      console.log(`[${meetingId}] Found send button, clicking...`);
+      await sendButton.click();
+    } else {
+      console.log(`[${meetingId}] Send button not found, pressing Enter...`);
+      await page.keyboard.press("Enter");
+    }
 
     console.log(`[${meetingId}] Message sent: ${message.substring(0, 50)}...`);
 
