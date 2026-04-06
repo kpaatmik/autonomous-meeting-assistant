@@ -2,44 +2,19 @@ import math
 import logging
 import os
 import re
-import requests
+from groq import Groq
 
 logger = logging.getLogger(__name__)
 
 class FlanSummarizer:
 
     def __init__(self):
-        logger.info("Loading Pegasus-XSum via HF Inference for high-quality summarization...")
-        self.hf_token = os.getenv("HUGGINGFACE_API_KEY")
-        if not self.hf_token:
-            raise ValueError("HUGGINGFACE_API_KEY environment variable not set")
-        self.model_id = "google/pegasus-xsum"  # Best free summarization model
-        self.api_url = f"https://api-inference.huggingface.co/models/{self.model_id}"
-        self.headers = {"Authorization": f"Bearer {self.hf_token}"}
-        logger.info("Pegasus-XSum summarizer ready")
-
-    def _preprocess_text(self, text):
-        """Clean up transcript text for better summarization"""
-        # Remove common filler words and phrases
-        fillers = [
-            r'\b(um|uh|like|you know|so|well|actually|basically|i mean|sort of|kind of)\b',
-            r'\b(bye bye|thanks for watching|see you|next video)\b',
-            r'\b(if you see this|pin as|i don\'t know)\b',
-            r'\.\s*\.\s*\.',  # Multiple dots
-            r'\s+',  # Multiple spaces
-        ]
-
-        for pattern in fillers:
-            text = re.sub(pattern, ' ', text, flags=re.IGNORECASE)
-
-        # Fix common typos and clean up
-        text = re.sub(r'(\w)\1{2,}', r'\1', text)  # Remove repeated characters
-        text = re.sub(r'[^\w\s.,!?-]', '', text)  # Remove special chars except basic punctuation
-
-        # Clean up spacing
-        text = re.sub(r'\s+', ' ', text).strip()
-
-        return text
+        logger.info("Loading Groq Llama 3.1 for summarization...")
+        self.groq_api_key = os.getenv("GROQ_API_KEY")
+        if not self.groq_api_key:
+            raise ValueError("GROQ_API_KEY environment variable not set")
+        self.client = Groq(api_key=self.groq_api_key)
+        logger.info("Groq Llama 3.1 summarizer ready")
 
     def _preprocess_text(self, text):
         """Clean up transcript text for better summarization"""
@@ -77,23 +52,36 @@ class FlanSummarizer:
 
         return chunks
 
-    def _summarize_with_pegasus(self, text):
-        """Use Pegasus-XSum for high-quality abstractive summarization"""
+    def _summarize_with_llama(self, text):
+        """Use Groq Llama for high-quality summarization"""
+        prompt = f"""Please provide a comprehensive and well-structured summary of the following meeting transcript. Focus on:
+
+1. Main topics discussed
+2. Key decisions made
+3. Important action items or next steps
+4. Any conclusions or outcomes
+
+Be detailed but concise, and ensure the summary captures all important information from the transcript.
+
+Transcript:
+{text}
+
+Summary:"""
+
         try:
-            payload = {"inputs": text, "parameters": {"max_length": 200, "min_length": 50, "do_sample": False}}
-            response = requests.post(self.api_url, headers=self.headers, json=payload, timeout=60)
-            if response.status_code == 200:
-                result = response.json()
-                if isinstance(result, list) and result:
-                    return result[0].get("summary_text", text[:300])
-                else:
-                    return text[:300]
-            else:
-                logger.error(f"HF API error: {response.text}")
-                return text[:300]
+            message = self.client.chat.completions.create(
+                model="llama-3.1-70b-versatile",  # Use 70B for best quality
+                messages=[
+                    {"role": "system", "content": "You are an expert at summarizing meeting transcripts. Provide clear, concise, and well-structured summaries that capture all important points while being comprehensive."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=1500,  # Allow longer summaries
+                temperature=0.3
+            )
+            return message.choices[0].message.content
         except Exception as e:
-            logger.error(f"Pegasus summarization failed: {e}")
-            return text[:300]
+            logger.error(f"Groq summarization failed: {e}")
+            return text[:500]  # fallback
 
     def summarize_meeting(self, segments):
         """
@@ -110,24 +98,21 @@ class FlanSummarizer:
 
         if len(chunks) == 1:
             # Single chunk - summarize directly
-            final = self._summarize_with_pegasus(chunks[0])
+            final = self._summarize_with_llama(chunks[0])
         else:
             # Multiple chunks - summarize each then combine and re-summarize
             chunk_summaries = []
             for chunk in chunks:
-                summary = self._summarize_with_pegasus(chunk)
+                summary = self._summarize_with_llama(chunk)
                 chunk_summaries.append(summary)
 
             # Combine chunk summaries and create final summary
-            combined_text = " ".join(chunk_summaries)
-            if len(combined_text.split()) > 100:  # Only re-summarize if substantial content
-                final = self._summarize_with_pegasus(combined_text)
-            else:
-                final = combined_text
+            combined_text = "\n\n".join(chunk_summaries)
+            final = self._summarize_with_llama(combined_text)
 
         return {
             "summary": final,
-            "method": "pegasus-xsum-hf"
+            "method": "groq-llama-3.1-70b"
         }
 
 
