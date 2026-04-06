@@ -53,7 +53,7 @@ class FlanSummarizer:
         return chunks
 
     def _summarize_with_llama(self, text):
-        """Use Groq Llama for high-quality summarization"""
+        """Use Groq Mixtral for high-quality summarization"""
         prompt = f"""Please provide a comprehensive and well-structured summary of the following meeting transcript. Focus on:
 
 1. Main topics discussed
@@ -70,7 +70,7 @@ Summary:"""
 
         try:
             message = self.client.chat.completions.create(
-                model="llama-3.1-70b-versatile",  # Use 70B for best quality
+                model="mixtral-8x7b-32768",  # Currently supported model
                 messages=[
                     {"role": "system", "content": "You are an expert at summarizing meeting transcripts. Provide clear, concise, and well-structured summaries that capture all important points while being comprehensive."},
                     {"role": "user", "content": prompt}
@@ -112,7 +112,7 @@ Summary:"""
 
         return {
             "summary": final,
-            "method": "groq-llama-3.1-70b"
+            "method": "groq-mixtral-8x7b"
         }
 
 
