@@ -8,7 +8,7 @@ import logging
 import faiss
 import numpy as np
 
-from app.services.embeddings import EmbeddingService
+from services.embeddings import EmbeddingService
 
 # logging
 logging.basicConfig(level=logging.INFO)

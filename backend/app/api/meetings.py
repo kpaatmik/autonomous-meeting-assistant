@@ -1,14 +1,14 @@
 from fastapi import APIRouter
 from datetime import datetime
 import pytz
-from app.services.flan_qa_service import get_flan_qa_bot
-from app.services.flan_summarizer import get_flan_summarizer
-from app.services.persistence import get_persistence
+from services.flan_qa_service import get_flan_qa_bot
+from services.flan_summarizer import get_flan_summarizer
+from services.persistence import get_persistence
 
-from app.services.scheduler import get_scheduler
-from app.services.meeting_manager import manager
-from app.storage.meetings import MEETINGS
-from app.services.summary_service import get_summarizer
+from services.scheduler import get_scheduler
+from services.meeting_manager import manager
+from storage.meetings import MEETINGS
+from services.summary_service import get_summarizer
 # from app.services.rag_service import ask_meeting
 
 router = APIRouter(prefix="/meetings", tags=["Meetings"])
@@ -40,7 +40,7 @@ async def schedule_meeting(payload: dict):
 
     return {"status": "scheduled", "meeting_id": meeting_id}
 
-from app.services.persistence import get_persistence
+from services.persistence import get_persistence
 
 @router.get("/{meeting_id}/search")
 async def search_meeting(meeting_id: str, q: str, top_k: int = 5):

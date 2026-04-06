@@ -1,6 +1,6 @@
-from app.services.meeting_session import MeetingSession
+from services.meeting_session import MeetingSession
 import asyncio
-from app.services.scheduler import get_event_loop
+from services.scheduler import get_event_loop
 
 
 

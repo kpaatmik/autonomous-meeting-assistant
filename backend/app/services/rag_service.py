@@ -1,5 +1,5 @@
-from app.services.persistence import get_persistence
-from app.services.llm_client import generate
+from services.persistence import get_persistence
+from services.llm_client import generate
 
 persistence = get_persistence()
 

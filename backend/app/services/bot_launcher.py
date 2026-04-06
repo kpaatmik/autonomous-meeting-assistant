@@ -2,7 +2,7 @@ import asyncio
 import subprocess
 import json
 from pathlib import Path
-from app.storage.meetings import MEETINGS
+from storage.meetings import MEETINGS
 
 BOT_PATH = Path(__file__).resolve().parents[3] / "bot" / "bot.js"
 

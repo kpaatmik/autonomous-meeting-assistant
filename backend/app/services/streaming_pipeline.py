@@ -1,5 +1,5 @@
-from app.services.diarization import DiarizationService
-from app.services.transcription import TranscriptionService
+from services.diarization import DiarizationService
+from services.transcription import TranscriptionService
 
 class StreamingPipeline:
     def __init__(self, meeting_id):
