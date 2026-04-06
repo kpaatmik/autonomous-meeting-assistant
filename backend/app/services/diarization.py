@@ -4,6 +4,8 @@ import soundfile as sf
 import uuid, os
 from dotenv import load_dotenv
 import torch
+import warnings
+warnings.filterwarnings("ignore")
 load_dotenv()
 class DiarizationService:
     def __init__(self, meeting_id):
