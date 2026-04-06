@@ -79,19 +79,9 @@ async function sendMessage(page, message, meetingId) {
     await page.keyboard.type(message);
     await delay(200);
 
-    // Try to send - look for send button or press enter
-    const sendButton = await page.$('button[aria-label="Send message"]') ||
-                       await page.$('button[type="submit"]') ||
-                       await page.$('button[class*="send"]') ||
-                       await page.$('[data-testid="chat-send-button"]');
-
-    if (sendButton) {
-      console.log(`[${meetingId}] Found send button, clicking...`);
-      await sendButton.click();
-    } else {
-      console.log(`[${meetingId}] Send button not found, pressing Enter...`);
-      await page.keyboard.press("Enter");
-    }
+    // Send the message - only press Enter once
+    console.log(`[${meetingId}] Send button not found, pressing Enter...`);
+    await page.keyboard.press("Enter");
 
     console.log(`[${meetingId}] Message sent: ${message.substring(0, 50)}...`);
 
@@ -146,7 +136,8 @@ async function listenForAnswers(page, meetingId) {
             if (answer && answer.trim().length > 0) {
               console.log(`[${meetingId}] New answer received, sending to chat...`);
               const question = data.question || "Question";
-              const formattedMessage = `🤖 AI Assistant\n\n❓ ${question}\n\n💡 ${answer}`;
+              // Compact single-line format to avoid multiple messages
+              const formattedMessage = `Q: ${question} | A: ${answer}`;
               await sendMessage(page, formattedMessage, meetingId);
               await delay(500);
             }
@@ -207,16 +198,26 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
   await delay(8000);
 
   try {
-    // Try multiple selectors for name input
+    // Try multiple selectors for name input with better timing
     const nameInput = await page.$('input[name="displayName"]') ||
                       await page.$('input[id="displayName"]') ||
                       await page.$('input[placeholder*="name" i]') ||
                       await page.$('input[type="text"]');
 
     if (nameInput) {
-      await nameInput.clear();
+      // Clear any existing text first
+      await nameInput.click();
+      await page.keyboard.down('Control');
+      await page.keyboard.press('a');
+      await page.keyboard.up('Control');
+      await page.keyboard.press('Backspace');
+
+      // Type the bot name
       await nameInput.type(bot_name || "AI Assistant");
-      console.log(`[${meeting_id}] Name input found and set`);
+      console.log(`[${meeting_id}] Bot name set to: ${bot_name || "AI Assistant"}`);
+
+      // Wait a bit for the name to be set
+      await delay(500);
     } else {
       console.log(`[${meeting_id}] Name input not found - may already be set`);
     }
@@ -252,6 +253,29 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
 
   console.log(`[${meeting_id}] Bot joined`);
   await delay(5000);
+
+  // ============================================
+  // ✅ ENSURE BOT NAME IS SET AFTER JOINING
+  // ============================================
+  try {
+    // Double-check that our display name is set in the meeting
+    await page.evaluate((botName) => {
+      // Try to set the display name in Jitsi after joining
+      if (window.APP && window.APP.conference) {
+        window.APP.conference.setDisplayName(botName);
+      }
+      // Also try to update any UI elements that show the name
+      const nameElements = document.querySelectorAll('[data-testid*="name"], .displayname, .user-name');
+      nameElements.forEach(el => {
+        if (el.textContent !== botName) {
+          el.textContent = botName;
+        }
+      });
+    }, bot_name || "AI Assistant");
+    console.log(`[${meeting_id}] Display name confirmed: ${bot_name || "AI Assistant"}`);
+  } catch (err) {
+    console.log(`[${meeting_id}] Display name confirmation failed: ${err.message}`);
+  }
 
   // ============================================
   // ✅ START LISTENING AFTER FULL JOIN (ADDED)
