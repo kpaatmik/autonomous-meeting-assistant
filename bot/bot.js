@@ -23,8 +23,7 @@ async function sendMessage(page, message, meetingId) {
       await delay(1000); // Wait longer for chat to open
     } else {
       console.log(`[${meetingId}] Chat button not found, assuming chat is already open`);
-    // More robust selector for Jitsi chat input - try multiple approaches
-    let chatInput = null;
+    }
 
     // Try specific Jitsi selectors first (based on debug output)
     chatInput = await page.$('textarea[id="chat-input-messagebox"]') ||
