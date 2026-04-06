@@ -18,7 +18,7 @@ class FlanQABot:
         self.persistence = get_persistence()
         logger.info("Groq Llama 8B QA bot ready")
 
-    def answer_question(self, meeting_id: str, question: str, top_k: int = 8):
+    def answer_question(self, meeting_id: str, question: str, top_k: int = 12):
 
         # 🔵 Retrieve relevant segments using FAISS
         results = self.persistence.search(meeting_id, question, top_k)
@@ -32,10 +32,10 @@ class FlanQABot:
                 "sources": []
             }
 
-        # ⭐ Re-rank results → prioritize segments containing keyword
+        # ⭐ Re-rank results → prioritize segments containing keyword, then by similarity
         results = sorted(
             results,
-            key=lambda x: question.lower() in x[0][5].lower(),
+            key=lambda x: (question.lower() in x[0][5].lower(), x[1]),
             reverse=True
         )
 
@@ -50,7 +50,7 @@ class FlanQABot:
             context_blocks.append(text.strip())
             source_ids.append(seg_id)
 
-        transcript_context = "\n".join(context_blocks)
+        transcript_context = "\n".join(context_blocks[:8])  # Limit to top 8 most relevant segments
         pre_intent_section = ""
         if pre_intents:
             pre_intent_section = "Pre-Meeting Context:\n" + "\n".join(f"- {intent}" for intent in pre_intents) + "\n\n"
@@ -63,18 +63,23 @@ class FlanQABot:
 
 Question: {question}
 
-Answer the question using only the information from the meeting context above. If the information is not available in the context, say "This was not discussed in the meeting." Keep the answer concise and relevant."""
+Provide a detailed and comprehensive answer using the meeting context above. Include specific details, quotes, and examples from the discussion when relevant. If the information is not available in the context, clearly state that it was not discussed."""
 
-        message = self.client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=512,
-            temperature=0.3
-        )
+        try:
+            message = self.client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[
+                    {"role": "system", "content": "You are a helpful AI assistant that provides detailed, accurate answers about meeting discussions. Always be thorough and include relevant details from the context."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=1024,
+                temperature=0.5
+            )
 
-        output = message.choices[0].message.content
+            output = message.choices[0].message.content
+        except Exception as e:
+            logger.error(f"Groq API error: {e}")
+            output = "Sorry, I encountered an error while processing your question. Please try again."
         return {
             "answer": output,
             "sources": source_ids

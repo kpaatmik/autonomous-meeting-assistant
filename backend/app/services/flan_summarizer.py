@@ -17,7 +17,7 @@ class FlanSummarizer:
         self.headers = {"Authorization": f"Bearer {self.hf_token}"}
         logger.info("BART-large-cnn summarizer ready")
 
-    def _chunk_text(self, texts, chunk_size=1200):
+    def _chunk_text(self, texts, chunk_size=2000):
         """
         Hierarchical chunking.
         texts = list of segment texts
@@ -33,13 +33,17 @@ class FlanSummarizer:
         return chunks
 
     def _summarize_chunk(self, chunk):
-        payload = {"inputs": chunk}
-        response = requests.post(self.api_url, headers=self.headers, json=payload)
-        if response.status_code == 200:
-            out = response.json()[0]["summary_text"]
-        else:
-            logger.error(f"HF API error: {response.text}")
-            out = chunk[:200]  # fallback
+        try:
+            payload = {"inputs": chunk, "parameters": {"max_length": 300, "min_length": 100, "do_sample": False}}
+            response = requests.post(self.api_url, headers=self.headers, json=payload, timeout=30)
+            if response.status_code == 200:
+                out = response.json()[0]["summary_text"]
+            else:
+                logger.error(f"HF API error: {response.text}")
+                out = chunk[:400]  # fallback
+        except Exception as e:
+            logger.error(f"HF API request failed: {e}")
+            out = chunk[:400]  # fallback
         return out
 
     def summarize_meeting(self, segments):
@@ -62,13 +66,17 @@ class FlanSummarizer:
 
         # 🔴 REDUCE STEP
         combined_summaries = " ".join(mini_summaries)
-        payload = {"inputs": combined_summaries}
-        response = requests.post(self.api_url, headers=self.headers, json=payload)
-        if response.status_code == 200:
-            final = response.json()[0]["summary_text"]
-        else:
-            logger.error(f"HF API error: {response.text}")
-            final = combined_summaries[:500]  # fallback
+        try:
+            payload = {"inputs": combined_summaries, "parameters": {"max_length": 500, "min_length": 200, "do_sample": False}}
+            response = requests.post(self.api_url, headers=self.headers, json=payload, timeout=30)
+            if response.status_code == 200:
+                final = response.json()[0]["summary_text"]
+            else:
+                logger.error(f"HF API error: {response.text}")
+                final = combined_summaries[:800]  # fallback
+        except Exception as e:
+            logger.error(f"HF API request failed: {e}")
+            final = combined_summaries[:800]  # fallback
 
         return {
             "summary": final,
