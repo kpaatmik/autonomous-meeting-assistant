@@ -10,44 +10,25 @@ const delay = ms => new Promise(res => setTimeout(res, ms));
 // ============================================
 async function sendMessage(page, message, meetingId) {
   try {
-    // Debug: Log all possible input elements
-    const debugElements = await page.evaluate(() => {
-      const elements = [];
-      document.querySelectorAll('textarea, input[type="text"], div[contenteditable="true"]').forEach(el => {
-        elements.push({
-          tag: el.tagName.toLowerCase(),
-          id: el.id,
-          class: el.className,
-          placeholder: el.placeholder || el.getAttribute('placeholder'),
-          contenteditable: el.getAttribute('contenteditable'),
-          role: el.getAttribute('role'),
-          visible: el.offsetWidth > 0 && el.offsetHeight > 0
-        });
-      });
-      return elements;
-    });
-    console.log(`[${meetingId}] Available input elements:`, debugElements);
-
     // Try to find and click chat button
     const chatButton = await page.$('button[aria-label="Open chat"]') ||
                        await page.$('button[aria-label="Chat"]') ||
                        await page.$('[data-testid="chat-button"]') ||
                        await page.$('button[class*="chat"]') ||
                        await page.$('div[aria-label*="chat" i]');
-
+    
     if (chatButton) {
       console.log(`[${meetingId}] Found chat button, clicking...`);
       await chatButton.click();
       await delay(1000); // Wait longer for chat to open
     } else {
-      console.log(`[${meetingId}] Chat button not found`);
-    }
-
+      console.log(`[${meetingId}] Chat button not found, assuming chat is already open`);
     // More robust selector for Jitsi chat input - try multiple approaches
     let chatInput = null;
 
-    // Try specific Jitsi selectors first
-    chatInput = await page.$('textarea[id="usermsg"]') ||
+    // Try specific Jitsi selectors first (based on debug output)
+    chatInput = await page.$('textarea[id="chat-input-messagebox"]') ||
+                await page.$('textarea[id="usermsg"]') ||
                 await page.$('input[id="usermsg"]') ||
                 await page.$('textarea[placeholder*="message" i]') ||
                 await page.$('input[placeholder*="message" i]') ||
@@ -75,7 +56,8 @@ async function sendMessage(page, message, meetingId) {
         for (const el of candidates) {
           if (el.closest('[class*="chat"]') || el.closest('[id*="chat"]') ||
               el.getAttribute('placeholder')?.toLowerCase().includes('message') ||
-              el.getAttribute('aria-label')?.toLowerCase().includes('message')) {
+              el.getAttribute('aria-label')?.toLowerCase().includes('message') ||
+              el.id === 'chat-input-messagebox') {
             return el;
           }
         }
@@ -164,7 +146,9 @@ async function listenForAnswers(page, meetingId) {
 
             if (answer && answer.trim().length > 0) {
               console.log(`[${meetingId}] New answer received, sending to chat...`);
-              await sendMessage(page, `AI Assistant: ${answer}`, meetingId);
+              const question = data.question || "Question";
+              const formattedMessage = `🤖 AI Assistant\n\n❓ ${question}\n\n💡 ${answer}`;
+              await sendMessage(page, formattedMessage, meetingId);
               await delay(500);
             }
 
@@ -224,10 +208,21 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
   await delay(8000);
 
   try {
-    await page.waitForSelector('input[name="displayName"]', { timeout: 5000 });
-    await page.type('input[name="displayName"]', bot_name || "AI Assistant");
-  } catch {
-    console.log(`[${meeting_id}] Name input not found`);
+    // Try multiple selectors for name input
+    const nameInput = await page.$('input[name="displayName"]') ||
+                      await page.$('input[id="displayName"]') ||
+                      await page.$('input[placeholder*="name" i]') ||
+                      await page.$('input[type="text"]');
+
+    if (nameInput) {
+      await nameInput.clear();
+      await nameInput.type(bot_name || "AI Assistant");
+      console.log(`[${meeting_id}] Name input found and set`);
+    } else {
+      console.log(`[${meeting_id}] Name input not found - may already be set`);
+    }
+  } catch (err) {
+    console.log(`[${meeting_id}] Name input error: ${err.message}`);
   }
 
   await page.evaluate(() => {
@@ -260,12 +255,15 @@ async function joinMeeting({ meeting_id, meeting_url, bot_name }) {
   await delay(5000);
 
   // ============================================
-  // ✅ START LISTENING AFTER JOIN (ADDED)
+  // ✅ START LISTENING AFTER FULL JOIN (ADDED)
   // ============================================
-  // Start Redis listener in background without blocking
-  listenForAnswers(page, meeting_id).catch(err => {
-    console.error(`[${meeting_id}] Listener error: ${err.message}`);
-  });
+  // Wait additional time to ensure name input is gone and meeting is fully loaded
+  setTimeout(async () => {
+    console.log(`[${meeting_id}] Starting Redis listener after full join...`);
+    listenForAnswers(page, meeting_id).catch(err => {
+      console.error(`[${meeting_id}] Listener error: ${err.message}`);
+    });
+  }, 10000); // 10 second delay to ensure full join
 
 
   console.log(`[${meeting_id}] Connecting audio socket...`);
