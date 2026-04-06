@@ -64,35 +64,8 @@ async def search_meeting(meeting_id: str, q: str, top_k: int = 5):
 
     return {"results": out}
 
-@router.get("/{meeting_id}/summary")
-async def meeting_summary(meeting_id: str):
-
-    persistence = get_persistence()
-    summarizer = get_flan_summarizer()
-
-    rows = persistence.get_all_segments(meeting_id)
-
-    output = summarizer.summarize_meeting(rows)
-
-    return output
 
 """
-
-@router.get("/{meeting_id}/summary")
-async def meeting_summary(meeting_id: str):
-    persistence = get_persistence()
-    summarizer = get_flan_summarizer()
-
-    # fetch all segments
-    results = persistence.search(meeting_id, "", top_k=1000)
-
-    rows = [r[0] for r in results]
-
-    output = summarizer.summarize_meeting(rows)
-
-    return output
-
-
 @router.get("/{meeting_id}/summary")
 async def get_summary(meeting_id: str):
     summarizer = get_summarizer()

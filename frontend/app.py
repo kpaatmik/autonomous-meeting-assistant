@@ -32,7 +32,7 @@ with tab1:
 
         res = requests.post(f"{API}/meetings/schedule", json=payload)
 
-        st.success(res.json())
+        st.success("Meeting Scheduled successfully")
 
 
 # ======================

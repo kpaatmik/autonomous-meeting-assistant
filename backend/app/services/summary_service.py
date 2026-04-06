@@ -1,30 +1,63 @@
-from services.persistence import get_persistence
-from services.llm_client import generate
+import logging
+from transformers import pipeline
+from app.services.persistence import get_persistence
 
-persistence = get_persistence()
+logger = logging.getLogger(__name__)
 
-async def summarize_meeting(meeting_id: str):
+class MeetingSummarizer:
 
-    rows = persistence.conn.execute(
-        "SELECT text FROM segments WHERE meeting_id=?",
-        (meeting_id,)
-    ).fetchall()
+    def __init__(self):
+        logger.info("Loading FLAN-T5 summarization model...")
+        self.summarizer = pipeline(
+            "text2text-generation",
+            model="google/flan-t5-base",
+            max_length=512
+        )
+        logger.info("FLAN summarizer ready")
 
-    if not rows:
-        return "No transcript available."
+    def summarize_meeting(self, meeting_id: str):
 
-    full_text = " ".join([r[0] for r in rows])
+        persistence = get_persistence()
 
-    prompt = f"""
-    Summarize this meeting clearly with:
-    - key decisions
-    - action items
-    - important discussion points
+        # Fetch ALL segments from DB
+        conn = persistence.conn
+        cur = conn.cursor()
 
-    Transcript:
-    {full_text}
-    """
+        cur.execute(
+            "SELECT speaker, text FROM segments WHERE meeting_id=? ORDER BY id",
+            (meeting_id,)
+        )
 
-    summary = await generate(prompt)
+        rows = cur.fetchall()
 
-    return summary
+        if not rows:
+            return {"summary": "No meeting data found"}
+
+        transcript = "\n".join([f"{r[0]}: {r[1]}" for r in rows])
+
+        prompt = f"""
+        Summarize the following meeting.
+        Include:
+        - key discussion points
+        - decisions
+        - action items
+        
+        Meeting Transcript:
+        {transcript}
+        """
+
+        result = self.summarizer(prompt)[0]["generated_text"]
+
+        return {
+            "meeting_id": meeting_id,
+            "summary": result
+        }
+
+
+_summarizer = None
+
+def get_summarizer():
+    global _summarizer
+    if _summarizer is None:
+        _summarizer = MeetingSummarizer()
+    return _summarizer
