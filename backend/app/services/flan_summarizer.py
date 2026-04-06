@@ -7,13 +7,12 @@ logger = logging.getLogger(__name__)
 class FlanSummarizer:
 
     def __init__(self):
-        logger.info("Loading FLAN-T5 summarizer...")
+        logger.info("Loading DistilBART summarizer...")
         self.pipe = pipeline(
-            "text2text-generation",
-            model="google/flan-t5-base",
-            max_length=512
+            "summarization",
+            model="sshleifer/distilbart-cnn-12-6"
         )
-        logger.info("FLAN summarizer ready")
+        logger.info("DistilBART summarizer ready")
 
     def _chunk_text(self, texts, chunk_size=1200):
         """
@@ -31,14 +30,7 @@ class FlanSummarizer:
         return chunks
 
     def _summarize_chunk(self, chunk):
-        prompt = f"""
-Summarize this meeting discussion clearly:
-
-{chunk}
-
-Return short bullet summary.
-"""
-        out = self.pipe(prompt)[0]["generated_text"]
+        out = self.pipe(chunk, max_length=150, min_length=30, do_sample=False)[0]["summary_text"]
         return out
 
     def summarize_meeting(self, segments):
@@ -60,19 +52,8 @@ Return short bullet summary.
             mini_summaries.append(mini)
 
         # 🔴 REDUCE STEP
-        final_prompt = f"""
-Combine these summaries into one final meeting summary.
-
-Also extract:
-- Key Decisions
-- Action Items
-- Open Questions
-
-Summaries:
-{mini_summaries}
-"""
-
-        final = self.pipe(final_prompt)[0]["generated_text"]
+        combined_summaries = " ".join(mini_summaries)
+        final = self.pipe(combined_summaries, max_length=300, min_length=100, do_sample=False)[0]["summary_text"]
 
         return {
             "summary": final,

@@ -155,28 +155,29 @@ async def get_summary(meeting_id: str):
 @router.get("/{meeting_id}/summary")
 async def meeting_summary(meeting_id: str):
 
-    summary = await summarize_meeting(meeting_id)
+    persistence = get_persistence()
+    summarizer = get_flan_summarizer()
 
-    return {
-        "meeting_id": meeting_id,
-        "summary": summary
-    }
+    rows = persistence.get_all_segments(meeting_id)
+
+    output = summarizer.summarize_meeting(rows)
+
+    return output
+
+
 @router.post("/{meeting_id}/ask")
-async def ask_bot(meeting_id																	: str, payload: dict):
+async def ask_meeting_question(meeting_id: str, payload: dict):
 
     question = payload.get("question")
 
     if not question:
-        return {"error": "question missing"}
+        return {"error": "question required"}
 
-    answer = await ask_meeting(meeting_id, question)
+    qa_bot = get_flan_qa_bot()
 
-    return {
-        "meeting_id": meeting_id,
-        "question": question,
-        
-        "answer": answer
-    }
+    result = qa_bot.answer_question(meeting_id, question)
+
+    return result
 
 """
 @router.post("/{meeting_id}/ask")

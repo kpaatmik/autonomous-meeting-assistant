@@ -9,14 +9,13 @@ logger = logging.getLogger(__name__)
 class FlanQABot:
 
     def __init__(self):
-        logger.info("Loading FLAN QA model...")
+        logger.info("Loading DistilBERT QA model...")
         self.pipe = pipeline(
-            "text2text-generation",
-            model="google/flan-t5-base",
-            max_length=256
+            "question-answering",
+            model="distilbert-base-uncased-distilled-squad"
         )
         self.persistence = get_persistence()
-        logger.info("FLAN QA bot ready")
+        logger.info("DistilBERT QA bot ready")
 
     def answer_question(self, meeting_id: str, question: str, top_k: int = 8):
 
@@ -55,23 +54,16 @@ class FlanQABot:
         if pre_intents:
             pre_intent_section = "Pre-Meeting Context:\n" + "\n".join(f"- {intent}" for intent in pre_intents) + "\n\n"
 
-        prompt = f"""
-You are an assistant answering questions based on the meeting transcript and the pre-meeting agenda.
+        full_context = pre_intent_section + transcript_context
 
-{pre_intent_section}
-Transcript:
-{transcript_context}
+        result = self.pipe(question=question, context=full_context)
 
-Question: {question}
-
-Answer the question using the available meeting context. If the answer is not present, say: Not discussed.
-"""
-
-        output = self.pipe(prompt)[0]["generated_text"]
+        output = result['answer']
 
         return {
             "answer": output,
-            "sources": source_ids
+            "sources": source_ids,
+            "score": result.get('score', 0)
         }
 
 
