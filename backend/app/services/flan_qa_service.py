@@ -65,7 +65,7 @@ Question: {question}
 
 Answer the question using only the information from the meeting context above. If the information is not available in the context, say "This was not discussed in the meeting." Keep the answer concise and relevant."""
 
-        message = self.client.messages.create(
+        message = self.client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
                 {"role": "user", "content": prompt}
@@ -74,8 +74,7 @@ Answer the question using only the information from the meeting context above. I
             temperature=0.3
         )
 
-        output = message.content[0].text
-
+        output = message.choices[0].message.content
         return {
             "answer": output,
             "sources": source_ids
