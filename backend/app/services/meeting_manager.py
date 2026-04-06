@@ -1,6 +1,7 @@
 from services.meeting_session import MeetingSession
 import asyncio
 from services.scheduler import get_event_loop
+from services.persistence import get_persistence
 
 
 
@@ -34,6 +35,10 @@ class MeetingManager:
         session = MeetingSession(meeting_id)
         self.sessions[meeting_id] = session
         print(f"[INFO] session created for meeting {meeting_id}")
+
+        persistence = get_persistence()
+        persistence.update_meeting_metadata(meeting_id, status="running")
+
         await session.start()
         print(f"[INFO] Meeting {meeting_id} started")
 
@@ -41,6 +46,8 @@ class MeetingManager:
         session = self.sessions.pop(meeting_id, None)
         if session:
             await session.stop()
+            persistence = get_persistence()
+            persistence.update_meeting_metadata(meeting_id, status="completed")
             print(f"[INFO] Meeting {meeting_id} stopped")
             
     async def stop_all(self):
@@ -50,7 +57,11 @@ class MeetingManager:
         """
         for meeting_id, session in list(self.sessions.items()):
             try:
-               await session.stop()
+                await session.stop()
+                persistence = get_persistence()
+                persistence.update_meeting_metadata(meeting_id, status="completed")
+                print(f"[INFO] Meeting {meeting_id} stopped")
+               
             except Exception as e:
                 print(f"[WARN] Failed to stop meeting {meeting_id}: {e}")
 
