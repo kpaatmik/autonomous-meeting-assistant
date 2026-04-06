@@ -17,13 +17,16 @@ IST = pytz.timezone("Asia/Kolkata")
 
 
 @router.get("/")
-async def list_meetings():
-    return {"meetings": list(MEETINGS.values())}
+async def list_meetings(status: str = None):
+    persistence = get_persistence()
+    meetings = persistence.list_meeting_metadata(status=status)
+    return {"meetings": meetings}
 
 
 @router.get("/{meeting_id}")
 async def get_meeting(meeting_id: str):
-    meeting = MEETINGS.get(meeting_id)
+    persistence = get_persistence()
+    meeting = persistence.get_meeting_metadata(meeting_id)
     if not meeting:
         return {"error": "Meeting not found"}
     return meeting
@@ -42,6 +45,15 @@ async def schedule_meeting(payload: dict):
     }
 
     MEETINGS[meeting_id] = meeting_payload
+    persistence = get_persistence()
+    persistence.save_meeting_metadata(
+        meeting_id,
+        meeting_payload["meeting_url"],
+        meeting_payload["bot_name"],
+        meeting_payload["start_time"],
+        status="scheduled",
+        pre_intents=meeting_payload["pre_intents"]
+    )
 
     # 🔑 FIX: parse + localize time
     start_time = datetime.fromisoformat(meeting_payload["start_time"])
@@ -72,8 +84,13 @@ async def update_preintents(meeting_id: str, payload: dict):
     if not isinstance(pre_intents, list):
         return {"error": "pre_intents must be a list"}
 
-    meeting["pre_intents"] = [str(item).strip() for item in pre_intents if str(item).strip()]
-    return {"status": "updated", "meeting_id": meeting_id, "pre_intents": meeting["pre_intents"]}
+    pre_intents_clean = [str(item).strip() for item in pre_intents if str(item).strip()]
+    meeting["pre_intents"] = pre_intents_clean
+
+    persistence = get_persistence()
+    persistence.update_meeting_metadata(meeting_id, pre_intents=pre_intents_clean)
+
+    return {"status": "updated", "meeting_id": meeting_id, "pre_intents": pre_intents_clean}
 
 @router.get("/{meeting_id}/search")
 async def search_meeting(meeting_id: str, q: str, top_k: int = 5):

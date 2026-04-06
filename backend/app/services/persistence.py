@@ -1,6 +1,7 @@
 import sqlite3
 import threading
 import pickle
+import json
 from pathlib import Path
 from typing import Optional
 import logging
@@ -61,7 +62,110 @@ class Persistence:
             )
         """)
 
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS meeting_metadata (
+                meeting_id TEXT PRIMARY KEY,
+                meeting_url TEXT,
+                bot_name TEXT,
+                start_time TEXT,
+                status TEXT,
+                pre_intents TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         self.conn.commit()
+
+    def save_meeting_metadata(self, meeting_id: str, meeting_url: str, bot_name: str, start_time: str, status: str = "scheduled", pre_intents: Optional[list[str]] = None):
+        cur = self.conn.cursor()
+        cur.execute(
+            "INSERT OR REPLACE INTO meeting_metadata(meeting_id, meeting_url, bot_name, start_time, status, pre_intents, updated_at) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
+            (
+                meeting_id,
+                meeting_url,
+                bot_name,
+                start_time,
+                status,
+                json.dumps(pre_intents or []),
+            )
+        )
+        self.conn.commit()
+
+    def update_meeting_metadata(self, meeting_id: str, **kwargs):
+        if not kwargs:
+            return
+
+        fields = []
+        values = []
+        if "pre_intents" in kwargs:
+            fields.append("pre_intents = ?")
+            values.append(json.dumps(kwargs["pre_intents"] or []))
+        if "status" in kwargs:
+            fields.append("status = ?")
+            values.append(kwargs["status"])
+        if "meeting_url" in kwargs:
+            fields.append("meeting_url = ?")
+            values.append(kwargs["meeting_url"])
+        if "bot_name" in kwargs:
+            fields.append("bot_name = ?")
+            values.append(kwargs["bot_name"])
+        if "start_time" in kwargs:
+            fields.append("start_time = ?")
+            values.append(kwargs["start_time"])
+
+        if not fields:
+            return
+
+        values.append(meeting_id)
+        cur = self.conn.cursor()
+        cur.execute(
+            f"UPDATE meeting_metadata SET {', '.join(fields)}, updated_at = CURRENT_TIMESTAMP WHERE meeting_id = ?",
+            tuple(values)
+        )
+        self.conn.commit()
+
+    def get_meeting_metadata(self, meeting_id: str):
+        cur = self.conn.cursor()
+        cur.execute(
+            "SELECT meeting_id, meeting_url, bot_name, start_time, status, pre_intents FROM meeting_metadata WHERE meeting_id = ?",
+            (meeting_id,)
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "meeting_id": row[0],
+            "meeting_url": row[1],
+            "bot_name": row[2],
+            "start_time": row[3],
+            "status": row[4],
+            "pre_intents": json.loads(row[5] or "[]")
+        }
+
+    def list_meeting_metadata(self, status: Optional[str] = None):
+        cur = self.conn.cursor()
+        if status:
+            cur.execute(
+                "SELECT meeting_id, meeting_url, bot_name, start_time, status, pre_intents FROM meeting_metadata WHERE status = ? ORDER BY start_time DESC",
+                (status,)
+            )
+        else:
+            cur.execute(
+                "SELECT meeting_id, meeting_url, bot_name, start_time, status, pre_intents FROM meeting_metadata ORDER BY start_time DESC"
+            )
+
+        rows = cur.fetchall()
+        results = []
+        for row in rows:
+            results.append({
+                "meeting_id": row[0],
+                "meeting_url": row[1],
+                "bot_name": row[2],
+                "start_time": row[3],
+                "status": row[4],
+                "pre_intents": json.loads(row[5] or "[]")
+            })
+        return results
 
     # ---------------- LOCK ----------------
 
