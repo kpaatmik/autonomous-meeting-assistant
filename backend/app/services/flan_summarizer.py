@@ -9,12 +9,12 @@ logger = logging.getLogger(__name__)
 class FlanSummarizer:
 
     def __init__(self):
-        logger.info("Loading Groq Llama 3.1 for summarization...")
+        logger.info("Loading Groq mixtral for summarization...")
         self.groq_api_key = os.getenv("GROQ_API_KEY")
         if not self.groq_api_key:
             raise ValueError("GROQ_API_KEY environment variable not set")
         self.client = Groq(api_key=self.groq_api_key)
-        logger.info("Groq Llama 3.1 summarizer ready")
+        logger.info("Groq mixtral summarizer ready")
 
     def _preprocess_text(self, text):
         """Clean up transcript text for better summarization"""

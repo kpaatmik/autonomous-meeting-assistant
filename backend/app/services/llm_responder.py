@@ -27,7 +27,7 @@ def _truncate(text: str, max_len: int = 80) -> str:
 
 class LLMResponder:
     def __init__(self):
-        logger.info("Initializing LLMResponder (Llama3)")
+        logger.info("Initializing LLMResponder (Phi3)")
         self.redis_client = None
 
     async def _get_redis_client(self):
