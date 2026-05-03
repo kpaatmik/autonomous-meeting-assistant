@@ -8,7 +8,7 @@ from services.persistence import get_persistence
 from services.scheduler import get_scheduler
 from services.meeting_manager import manager
 from storage.meetings import MEETINGS
-from services.summary_service import get_summarizer
+#from services.summary_service import get_summarizer
 # from app.services.rag_service import ask_meeting
 
 router = APIRouter(prefix="/meetings", tags=["Meetings"])
